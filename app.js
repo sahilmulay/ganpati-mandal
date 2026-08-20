@@ -912,6 +912,60 @@ function openBill(image) {
   `);
 }
 
+/* Digital Pavati HTML5 Canvas Image Generator */
+function generateReceiptCanvas(d) {
+  return new Promise((resolve) => {
+    let img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      let canvas = document.createElement('canvas');
+      canvas.width = img.width;   // 920
+      canvas.height = img.height; // 510
+      let ctx = canvas.getContext('2d');
+
+      // Draw background template image
+      ctx.drawImage(img, 0, 0);
+
+      let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '23758';
+      let dateStr = dateLabelInMarathi(d.date) || d.date;
+      let nameStr = d.name || '';
+      let amountStr = (d.amount || 0) + '/-';
+      let wordsStr = (numberToMarathiWords(d.amount) || '') + ' फक्त';
+
+      ctx.fillStyle = '#6b0d0d'; // Traditional Maroon color
+      ctx.textBaseline = 'middle';
+
+      // 1. Receipt No ( पावती क्र. )
+      ctx.font = 'bold 20px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(receiptNo, 440, 256);
+
+      // 2. Date ( दिनांक )
+      ctx.font = 'bold 18px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(dateStr, 755, 256);
+
+      // 3. Name ( श्री. )
+      ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(nameStr, 200, 306);
+
+      // 4. Amount figures ( देणगी रक्कम अंकी )
+      ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(amountStr, 500, 356);
+
+      // 5. Amount words ( देणगी रक्कम अक्षरी )
+      ctx.font = 'bold 18px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(wordsStr, 200, 408);
+
+      // 6. Bottom Box ( रु. Box )
+      ctx.font = 'bold 20px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('रु. ' + amountStr, 60, 492);
+
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve('');
+    img.src = 'assets/receipt-template.jpg';
+  });
+}
+
 /* WhatsApp Text Donation Receipt Generator */
 function receiptText(d) {
   let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '23758';
@@ -932,17 +986,21 @@ function copyReceiptText(id) {
   toast('Receipt copied!');
 }
 
-function openReceiptModal(id) {
+async function openReceiptModal(id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
   let text = receiptText(d);
   let waUrl = getWhatsAppReceiptUrl(d);
+  let canvasDataUrl = await generateReceiptCanvas(d);
+
   modal(
-    'WhatsApp Receipt Message',
+    'Digital Donation Receipt (पावती)',
     `<div class="receipt-modal-wrap">
+      ${canvasDataUrl ? `<div style="text-align:center; margin-bottom:12px;"><img src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);"></div>` : ''}
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions">
-        <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Receipt</button>
+        ${canvasDataUrl ? `<a href="${canvasDataUrl}" download="pavati-${d.name.replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px;">🖼️ Download Pavati Image</a>` : ''}
+        <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
         <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
       </div>
     </div>`
