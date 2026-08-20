@@ -9,24 +9,24 @@ const cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publi
 
 /* Configurable Receipt Alignment Settings */
 const DEFAULT_RECEIPT_CONFIG = {
-  DATE_X: 720,
-  DATE_Y: 302,
+  DATE_X: 759,
+  DATE_Y: 324,
   DATE_FONT_SIZE: 22,
 
-  NAME_X: 280,
-  NAME_Y: 366,
+  NAME_X: 357,
+  NAME_Y: 355,
   NAME_FONT_SIZE: 24,
 
-  AMOUNT_X: 530,
-  AMOUNT_Y: 432,
+  AMOUNT_X: 535,
+  AMOUNT_Y: 431,
   AMOUNT_FONT_SIZE: 24,
 
-  AMOUNT_WORDS_X: 330,
-  AMOUNT_WORDS_Y: 498,
+  AMOUNT_WORDS_X: 352,
+  AMOUNT_WORDS_Y: 472,
   AMOUNT_WORDS_FONT_SIZE: 20,
 
-  BOTTOM_AMOUNT_X: 145,
-  BOTTOM_AMOUNT_Y: 566,
+  BOTTOM_AMOUNT_X: 190,
+  BOTTOM_AMOUNT_Y: 553,
   BOTTOM_AMOUNT_FONT_SIZE: 24,
 
   TEXT_COLOR: '#941838', // Original dark red/maroon ink color
@@ -1028,33 +1028,43 @@ async function openReceiptModal(id) {
   let waUrl = getWhatsAppReceiptUrl(d);
   let canvasDataUrl = await generateReceiptCanvas(d);
 
+  const makeCoordRow = (label, key, minVal, maxVal, donationId) => `
+    <div style="background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #ebd8c8;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-weight:600; color:#5a231b;">${label}</span>
+        <input type="number" id="num_${key}" value="${RECEIPT_CONFIG[key]}" style="width:65px; padding:3px 6px; font-weight:700; color:#8b261e; border:1px solid #d4b8a5; border-radius:6px; font-size:12px; text-align:right;" oninput="updateCoord('${key}', this.value, '${donationId}')">
+      </div>
+      <input type="range" id="range_${key}" min="${minVal}" max="${maxVal}" value="${RECEIPT_CONFIG[key]}" style="width:100%; accent-color:#e77426; cursor:pointer;" oninput="updateCoord('${key}', this.value, '${donationId}')">
+    </div>
+  `;
+
   modal(
     'Digital Donation Receipt (पावती)',
     `<div class="receipt-modal-wrap">
       ${canvasDataUrl ? `<div style="text-align:center; margin-bottom:12px;"><img id="receiptCanvasImg" src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);"></div>` : ''}
       
-      <!-- Configurable Alignment Controls Accordion -->
+      <!-- Configurable Alignment Controls Accordion with Live Numbers -->
       <details class="alignment-details" style="margin-bottom:14px; background:#fff7ee; border:1px solid #f0dabf; border-radius:10px; padding:10px;">
         <summary style="font-weight:700; color:#8b261e; cursor:pointer; font-size:12px;">⚙️ Live Coordinate Alignment (Fine-Tune Positioning)</summary>
-        <div class="alignment-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; font-size:11px;">
-          <div><label>Date X (${RECEIPT_CONFIG.DATE_X})</label><input type="range" min="500" max="900" value="${RECEIPT_CONFIG.DATE_X}" oninput="updateCoord('DATE_X',this.value,'${d.id}')"></div>
-          <div><label>Date Y (${RECEIPT_CONFIG.DATE_Y})</label><input type="range" min="200" max="400" value="${RECEIPT_CONFIG.DATE_Y}" oninput="updateCoord('DATE_Y',this.value,'${d.id}')"></div>
+        <div class="alignment-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; font-size:11px;">
+          ${makeCoordRow('Date X', 'DATE_X', 500, 900, d.id)}
+          ${makeCoordRow('Date Y', 'DATE_Y', 200, 400, d.id)}
           
-          <div><label>Name X (${RECEIPT_CONFIG.NAME_X})</label><input type="range" min="150" max="500" value="${RECEIPT_CONFIG.NAME_X}" oninput="updateCoord('NAME_X',this.value,'${d.id}')"></div>
-          <div><label>Name Y (${RECEIPT_CONFIG.NAME_Y})</label><input type="range" min="300" max="450" value="${RECEIPT_CONFIG.NAME_Y}" oninput="updateCoord('NAME_Y',this.value,'${d.id}')"></div>
+          ${makeCoordRow('Name X', 'NAME_X', 150, 600, d.id)}
+          ${makeCoordRow('Name Y', 'NAME_Y', 250, 450, d.id)}
           
-          <div><label>Amount X (${RECEIPT_CONFIG.AMOUNT_X})</label><input type="range" min="400" max="700" value="${RECEIPT_CONFIG.AMOUNT_X}" oninput="updateCoord('AMOUNT_X',this.value,'${d.id}')"></div>
-          <div><label>Amount Y (${RECEIPT_CONFIG.AMOUNT_Y})</label><input type="range" min="380" max="500" value="${RECEIPT_CONFIG.AMOUNT_Y}" oninput="updateCoord('AMOUNT_Y',this.value,'${d.id}')"></div>
+          ${makeCoordRow('Amount X', 'AMOUNT_X', 400, 800, d.id)}
+          ${makeCoordRow('Amount Y', 'AMOUNT_Y', 350, 500, d.id)}
           
-          <div><label>Words X (${RECEIPT_CONFIG.AMOUNT_WORDS_X})</label><input type="range" min="200" max="500" value="${RECEIPT_CONFIG.AMOUNT_WORDS_X}" oninput="updateCoord('AMOUNT_WORDS_X',this.value,'${d.id}')"></div>
-          <div><label>Words Y (${RECEIPT_CONFIG.AMOUNT_WORDS_Y})</label><input type="range" min="430" max="550" value="${RECEIPT_CONFIG.AMOUNT_WORDS_Y}" oninput="updateCoord('AMOUNT_WORDS_Y',this.value,'${d.id}')"></div>
+          ${makeCoordRow('Words X', 'AMOUNT_WORDS_X', 200, 600, d.id)}
+          ${makeCoordRow('Words Y', 'AMOUNT_WORDS_Y', 400, 580, d.id)}
           
-          <div><label>Bottom Box X (${RECEIPT_CONFIG.BOTTOM_AMOUNT_X})</label><input type="range" min="50" max="300" value="${RECEIPT_CONFIG.BOTTOM_AMOUNT_X}" oninput="updateCoord('BOTTOM_AMOUNT_X',this.value,'${d.id}')"></div>
-          <div><label>Bottom Box Y (${RECEIPT_CONFIG.BOTTOM_AMOUNT_Y})</label><input type="range" min="500" max="620" value="${RECEIPT_CONFIG.BOTTOM_AMOUNT_Y}" oninput="updateCoord('BOTTOM_AMOUNT_Y',this.value,'${d.id}')"></div>
+          ${makeCoordRow('Bottom Box X', 'BOTTOM_AMOUNT_X', 50, 350, d.id)}
+          ${makeCoordRow('Bottom Box Y', 'BOTTOM_AMOUNT_Y', 450, 620, d.id)}
           
-          <div style="grid-column:1/-1; display:flex; gap:6px; margin-top:6px;">
-            <button class="primary-btn" style="padding:6px 10px; font-size:10px;" onclick="saveReceiptConfig()">💾 Save Coordinates</button>
-            <button class="outline-btn" style="padding:6px 10px; font-size:10px;" onclick="resetReceiptConfig();openReceiptModal('${d.id}')">🔄 Reset Defaults</button>
+          <div style="grid-column:1/-1; display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
+            <button class="outline-btn" style="padding:6px 12px; font-size:11px;" onclick="resetReceiptConfig();openReceiptModal('${d.id}')">🔄 Reset Defaults</button>
+            <button class="primary-btn" style="padding:6px 12px; font-size:11px;" onclick="saveReceiptConfig()">💾 Save Coordinates</button>
           </div>
         </div>
       </details>
@@ -1070,9 +1080,17 @@ async function openReceiptModal(id) {
   );
 }
 
-/* Live Coordinate Update Callback */
+/* Live Coordinate Update Callback (Syncs sliders & numeric input boxes) */
 async function updateCoord(key, val, donationId) {
-  RECEIPT_CONFIG[key] = Number(val);
+  let numVal = Number(val);
+  RECEIPT_CONFIG[key] = numVal;
+  
+  // Sync input number box and slider
+  let numEl = document.getElementById('num_' + key);
+  let rangeEl = document.getElementById('range_' + key);
+  if (numEl && numEl.value != numVal) numEl.value = numVal;
+  if (rangeEl && rangeEl.value != numVal) rangeEl.value = numVal;
+
   let d = db.donations.find(x => String(x.id) === String(donationId));
   if (!d) return;
   let newCanvasUrl = await generateReceiptCanvas(d, RECEIPT_CONFIG);
