@@ -801,11 +801,22 @@ async function saveItem(type, id, o) {
 
   if (!cloud) return;
   let isCloudId = id && id.includes('-');
-  let query = isCloudId ? cloud.from(tableName[type]).update(toCloud(type, o)).eq('id', id).select().single() : cloud.from(tableName[type]).insert(toCloud(type, o)).select().single();
+  let payload = toCloud(type, o);
+  let query = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
   let { data, error } = await query;
+
+  // Smart retry: if 'phone' column hasn't been added to Supabase donations table yet, retry without 'phone'
+  if (error && error.code === 'PGRST204' && type === 'donation' && 'phone' in payload) {
+    delete payload.phone;
+    let retryQuery = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
+    let res = await retryQuery;
+    data = res.data;
+    error = res.error;
+  }
+
   if (error) {
     toast('Saved locally, but cloud sync failed.');
-    console.warn(error);
+    console.warn('Supabase Error:', error);
     return;
   }
   let updated = fromCloud(type, data);
