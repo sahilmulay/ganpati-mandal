@@ -7,6 +7,45 @@ const CLOUD_CONFIG = {
 };
 const cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
 
+/* Configurable Receipt Alignment Settings */
+const DEFAULT_RECEIPT_CONFIG = {
+  DATE_X: 720,
+  DATE_Y: 302,
+  DATE_FONT_SIZE: 22,
+
+  NAME_X: 280,
+  NAME_Y: 366,
+  NAME_FONT_SIZE: 24,
+
+  AMOUNT_X: 530,
+  AMOUNT_Y: 432,
+  AMOUNT_FONT_SIZE: 24,
+
+  AMOUNT_WORDS_X: 330,
+  AMOUNT_WORDS_Y: 498,
+  AMOUNT_WORDS_FONT_SIZE: 20,
+
+  BOTTOM_AMOUNT_X: 145,
+  BOTTOM_AMOUNT_Y: 566,
+  BOTTOM_AMOUNT_FONT_SIZE: 24,
+
+  TEXT_COLOR: '#941838', // Original dark red/maroon ink color
+  FONT_FAMILY: '"Noto Sans Devanagari", sans-serif'
+};
+
+let RECEIPT_CONFIG = JSON.parse(localStorage.getItem('mandal_receipt_config') || 'null') || { ...DEFAULT_RECEIPT_CONFIG };
+
+function saveReceiptConfig() {
+  localStorage.setItem('mandal_receipt_config', JSON.stringify(RECEIPT_CONFIG));
+  toast('Alignment settings saved!');
+}
+
+function resetReceiptConfig() {
+  RECEIPT_CONFIG = { ...DEFAULT_RECEIPT_CONFIG };
+  localStorage.removeItem('mandal_receipt_config');
+  toast('Alignment reset to defaults');
+}
+
 /* Security Helper: HTML Escaping for XSS Prevention */
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -310,7 +349,7 @@ function marathiDayName(dateStr) {
 function dateLabelInMarathi(dStr) {
   if (!dStr) return '';
   let [y, m, d] = dStr.split('-');
-  return `${Number(d)} ${marathiMonthName(m)} ${y}`;
+  return `${Number(d)}-${m}-${y}`;
 }
 
 function dateFullInMarathi(dStr) {
@@ -912,57 +951,53 @@ function openBill(image) {
   `);
 }
 
-/* Digital Pavati HTML5 Canvas Image Generator */
-function generateReceiptCanvas(d) {
+/* Digital Pavati HTML5 Canvas Image Generator (Configurable Coordinates) */
+function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
   return new Promise((resolve) => {
     let img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       let canvas = document.createElement('canvas');
-      canvas.width = img.width;   // 920
-      canvas.height = img.height; // 510
+      canvas.width = img.width;   // 1024
+      canvas.height = img.height; // 629
       let ctx = canvas.getContext('2d');
 
-      // Draw background template image
+      // Preserve original template colors, dimensions, and design
       ctx.drawImage(img, 0, 0);
 
-      let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '23758';
-      let dateStr = dateLabelInMarathi(d.date) || d.date;
-      let nameStr = d.name || '';
-      let amountStr = (d.amount || 0) + '/-';
-      let wordsStr = (numberToMarathiWords(d.amount) || '') + ' फक्त';
+      let dateStr = dateLabelInMarathi(d.date) || d.date || '20-08-2026';
+      let nameStr = d.name || 'Sahil Ashok Mulay';
+      let amountStr = (d.amount !== undefined ? d.amount : '890') + '/-';
+      let wordsStr = d.amount_words || (numberToMarathiWords(d.amount || 890) + ' फक्त');
 
-      ctx.fillStyle = '#6b0d0d'; // Traditional Maroon color
+      ctx.fillStyle = config.TEXT_COLOR || '#941838'; // Dark red/maroon ink color
       ctx.textBaseline = 'middle';
+      ctx.imageSmoothingEnabled = true;
 
-      // 1. Receipt No ( पावती क्र. )
-      ctx.font = 'bold 20px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText(receiptNo, 440, 256);
+      // 1. Date (दिनांक)
+      ctx.font = `bold ${config.DATE_FONT_SIZE || 22}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+      ctx.fillText(dateStr, config.DATE_X, config.DATE_Y);
 
-      // 2. Date ( दिनांक )
-      ctx.font = 'bold 18px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText(dateStr, 755, 256);
+      // 2. Donor Name (नाव श्री.)
+      ctx.font = `bold ${config.NAME_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+      ctx.fillText(nameStr, config.NAME_X, config.NAME_Y);
 
-      // 3. Name ( श्री. )
-      ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText(nameStr, 200, 306);
+      // 3. Donation Amount Numeric (देणगी रक्कम अंकी)
+      ctx.font = `bold ${config.AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+      ctx.fillText(amountStr, config.AMOUNT_X, config.AMOUNT_Y);
 
-      // 4. Amount figures ( देणगी रक्कम अंकी )
-      ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText(amountStr, 500, 356);
+      // 4. Donation Amount Words (देणगी रक्कम अक्षरी)
+      ctx.font = `bold ${config.AMOUNT_WORDS_FONT_SIZE || 20}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+      ctx.fillText(wordsStr, config.AMOUNT_WORDS_X, config.AMOUNT_WORDS_Y);
 
-      // 5. Amount words ( देणगी रक्कम अक्षरी )
-      ctx.font = 'bold 18px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText(wordsStr, 200, 408);
-
-      // 6. Bottom Box ( रु. Box )
-      ctx.font = 'bold 20px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText('रु. ' + amountStr, 60, 492);
+      // 5. Bottom Amount Box (रु. Box)
+      ctx.font = `bold ${config.BOTTOM_AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+      ctx.fillText(amountStr, config.BOTTOM_AMOUNT_X, config.BOTTOM_AMOUNT_Y);
 
       resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = () => resolve('');
-    img.src = 'assets/receipt-template.jpg';
+    img.src = 'assets/receipt_template.png';
   });
 }
 
@@ -996,15 +1031,79 @@ async function openReceiptModal(id) {
   modal(
     'Digital Donation Receipt (पावती)',
     `<div class="receipt-modal-wrap">
-      ${canvasDataUrl ? `<div style="text-align:center; margin-bottom:12px;"><img src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);"></div>` : ''}
+      ${canvasDataUrl ? `<div style="text-align:center; margin-bottom:12px;"><img id="receiptCanvasImg" src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);"></div>` : ''}
+      
+      <!-- Configurable Alignment Controls Accordion -->
+      <details class="alignment-details" style="margin-bottom:14px; background:#fff7ee; border:1px solid #f0dabf; border-radius:10px; padding:10px;">
+        <summary style="font-weight:700; color:#8b261e; cursor:pointer; font-size:12px;">⚙️ Live Coordinate Alignment (Fine-Tune Positioning)</summary>
+        <div class="alignment-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; font-size:11px;">
+          <div><label>Date X (${RECEIPT_CONFIG.DATE_X})</label><input type="range" min="500" max="900" value="${RECEIPT_CONFIG.DATE_X}" oninput="updateCoord('DATE_X',this.value,'${d.id}')"></div>
+          <div><label>Date Y (${RECEIPT_CONFIG.DATE_Y})</label><input type="range" min="200" max="400" value="${RECEIPT_CONFIG.DATE_Y}" oninput="updateCoord('DATE_Y',this.value,'${d.id}')"></div>
+          
+          <div><label>Name X (${RECEIPT_CONFIG.NAME_X})</label><input type="range" min="150" max="500" value="${RECEIPT_CONFIG.NAME_X}" oninput="updateCoord('NAME_X',this.value,'${d.id}')"></div>
+          <div><label>Name Y (${RECEIPT_CONFIG.NAME_Y})</label><input type="range" min="300" max="450" value="${RECEIPT_CONFIG.NAME_Y}" oninput="updateCoord('NAME_Y',this.value,'${d.id}')"></div>
+          
+          <div><label>Amount X (${RECEIPT_CONFIG.AMOUNT_X})</label><input type="range" min="400" max="700" value="${RECEIPT_CONFIG.AMOUNT_X}" oninput="updateCoord('AMOUNT_X',this.value,'${d.id}')"></div>
+          <div><label>Amount Y (${RECEIPT_CONFIG.AMOUNT_Y})</label><input type="range" min="380" max="500" value="${RECEIPT_CONFIG.AMOUNT_Y}" oninput="updateCoord('AMOUNT_Y',this.value,'${d.id}')"></div>
+          
+          <div><label>Words X (${RECEIPT_CONFIG.AMOUNT_WORDS_X})</label><input type="range" min="200" max="500" value="${RECEIPT_CONFIG.AMOUNT_WORDS_X}" oninput="updateCoord('AMOUNT_WORDS_X',this.value,'${d.id}')"></div>
+          <div><label>Words Y (${RECEIPT_CONFIG.AMOUNT_WORDS_Y})</label><input type="range" min="430" max="550" value="${RECEIPT_CONFIG.AMOUNT_WORDS_Y}" oninput="updateCoord('AMOUNT_WORDS_Y',this.value,'${d.id}')"></div>
+          
+          <div><label>Bottom Box X (${RECEIPT_CONFIG.BOTTOM_AMOUNT_X})</label><input type="range" min="50" max="300" value="${RECEIPT_CONFIG.BOTTOM_AMOUNT_X}" oninput="updateCoord('BOTTOM_AMOUNT_X',this.value,'${d.id}')"></div>
+          <div><label>Bottom Box Y (${RECEIPT_CONFIG.BOTTOM_AMOUNT_Y})</label><input type="range" min="500" max="620" value="${RECEIPT_CONFIG.BOTTOM_AMOUNT_Y}" oninput="updateCoord('BOTTOM_AMOUNT_Y',this.value,'${d.id}')"></div>
+          
+          <div style="grid-column:1/-1; display:flex; gap:6px; margin-top:6px;">
+            <button class="primary-btn" style="padding:6px 10px; font-size:10px;" onclick="saveReceiptConfig()">💾 Save Coordinates</button>
+            <button class="outline-btn" style="padding:6px 10px; font-size:10px;" onclick="resetReceiptConfig();openReceiptModal('${d.id}')">🔄 Reset Defaults</button>
+          </div>
+        </div>
+      </details>
+
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions">
-        ${canvasDataUrl ? `<a href="${canvasDataUrl}" download="pavati-${d.name.replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px;">🖼️ Download Pavati Image</a>` : ''}
+        ${canvasDataUrl ? `<a id="downloadPngLink" href="${canvasDataUrl}" download="pavati-${d.name.replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px;">🖼️ Download PNG</a>` : ''}
+        ${canvasDataUrl ? `<button onclick="exportReceiptPDF('${d.id}')" class="outline-btn" style="display:inline-flex; align-items:center; gap:4px;">📄 Download PDF</button>` : ''}
         <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
         <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
       </div>
     </div>`
   );
+}
+
+/* Live Coordinate Update Callback */
+async function updateCoord(key, val, donationId) {
+  RECEIPT_CONFIG[key] = Number(val);
+  let d = db.donations.find(x => String(x.id) === String(donationId));
+  if (!d) return;
+  let newCanvasUrl = await generateReceiptCanvas(d, RECEIPT_CONFIG);
+  let img = document.getElementById('receiptCanvasImg');
+  let pngLink = document.getElementById('downloadPngLink');
+  if (img) img.src = newCanvasUrl;
+  if (pngLink) pngLink.href = newCanvasUrl;
+}
+
+/* High-Quality PDF Export Generator */
+async function exportReceiptPDF(donationId) {
+  let d = db.donations.find(x => String(x.id) === String(donationId));
+  if (!d) return;
+  let canvasDataUrl = await generateReceiptCanvas(d, RECEIPT_CONFIG);
+
+  if (window.jspdf) {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [148, 91] // Standard A6 Landscape format
+    });
+    pdf.addImage(canvasDataUrl, 'PNG', 0, 0, 148, 91);
+    pdf.save(`pavati-${(d.name || 'receipt').replace(/\s+/g, '_')}.pdf`);
+    toast('PDF Receipt Downloaded!');
+  } else {
+    // Print fallback
+    let printWin = window.open('', '_blank');
+    printWin.document.write(`<html><head><title>Receipt PDF</title></head><body style="margin:0;display:grid;place-items:center;height:100vh;"><img src="${canvasDataUrl}" style="max-width:100%;height:auto;" onload="window.print();window.close();"></body></html>`);
+    printWin.document.close();
+  }
 }
 
 /* Grouped Aarti WhatsApp Message Generator with Filtered Assigned Dates Only */
