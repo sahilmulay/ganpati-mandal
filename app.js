@@ -33,6 +33,8 @@ const RECEIPT_CONFIG = {
   FONT_FAMILY: '"Noto Sans Devanagari", sans-serif'
 };
 
+let currentModalReceiptData = null; // Stores pre-rendered receipt data for instant popup-safe sharing
+
 /* Security Helper: HTML Escaping for XSS Prevention */
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -996,7 +998,7 @@ function receiptText(d) {
 
 function getWhatsAppReceiptUrl(d) {
   let phone = (d.phone || '').replace(/\D/g, '');
-  if (phone && phone.length === 10) phone = '91' + phone;
+  if (phone.length === 10) phone = '91' + phone;
   let text = encodeURIComponent(receiptText(d));
   return phone ? `https://api.whatsapp.com/send?phone=${phone}&text=${text}` : `https://api.whatsapp.com/send?text=${text}`;
 }
@@ -1008,36 +1010,34 @@ function copyReceiptText(id) {
   toast('Receipt text copied!');
 }
 
-/* Dual Share via WhatsApp (Image + Text via Web Share API or Direct WhatsApp Link) */
-async function sendReceiptWhatsAppWithImage(id) {
+/* Synchronous Popup-Safe WhatsApp Trigger targeting donor phone number directly */
+function sendReceiptWhatsApp(id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
 
   let text = receiptText(d);
-  let canvasDataUrl = await generateReceiptCanvas(d);
+  let canvasDataUrl = currentModalReceiptData;
 
-  // Try Web Share API (native mobile share sheet sending both image & text directly into WhatsApp)
-  if (canvasDataUrl && navigator.canShare) {
-    try {
-      let res = await fetch(canvasDataUrl);
-      let blob = await res.blob();
-      let file = new File([blob], `pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png`, { type: 'image/png' });
+  // Format phone number directly to 91XXXXXXXXXX
+  let phone = (d.phone || '').replace(/\D/g, '');
+  if (phone.length === 10) phone = '91' + phone;
 
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: 'देणगी पावती - वृंदावन मंडळ',
-          text: text,
-          files: [file]
-        });
-        return;
-      }
-    } catch (err) {
-      console.warn('Native share cancelled/failed, falling back to direct link:', err);
-    }
+  let waUrl = phone 
+    ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}` 
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+  // Automatically download receipt image so user can easily attach it in WhatsApp chat
+  if (canvasDataUrl) {
+    let a = document.createElement('a');
+    a.href = canvasDataUrl;
+    a.download = `pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast('Downloading receipt image & opening WhatsApp…');
   }
 
-  // Fallback: Direct WhatsApp message link
-  let waUrl = getWhatsAppReceiptUrl(d);
+  // Open WhatsApp directly to phone number synchronously (bypasses browser popup blocks)
   window.open(waUrl, '_blank');
 }
 
@@ -1046,6 +1046,7 @@ async function openReceiptModal(id) {
   if (!d) return;
   let text = receiptText(d);
   let canvasDataUrl = await generateReceiptCanvas(d);
+  currentModalReceiptData = canvasDataUrl;
 
   modal(
     'Digital Donation Receipt (पावती)',
@@ -1054,8 +1055,9 @@ async function openReceiptModal(id) {
       
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions">
+        ${canvasDataUrl ? `<a href="${canvasDataUrl}" download="pavati-${d.name.replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">🖼️ Download Receipt Image</a>` : ''}
         <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
-        <button onclick="sendReceiptWhatsAppWithImage('${d.id}')" class="primary-btn whatsapp-action-btn" style="display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</button>
+        <button onclick="sendReceiptWhatsApp('${d.id}')" class="primary-btn whatsapp-action-btn" style="display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</button>
       </div>
     </div>`
   );
@@ -1120,7 +1122,7 @@ function renderAartiMessageModal() {
     `<div class="aarti-msg-modal">
       <div class="msg-type-tabs">
         <button class="tab ${currentMsgType === 'Morning' ? 'active' : ''}" onclick="switchMsgType('Morning')">🌅 Morning Aarti (९:०० AM)</button>
-        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')">🌆 Evening Aarti (८:०० PM)</button>
+        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')"><ctrl42> Evening Aarti (८:०० PM)</button>
       </div>
       <div class="msg-date-select">
         <label>आरती दिनांक (Assigned Dates Only):</label>
