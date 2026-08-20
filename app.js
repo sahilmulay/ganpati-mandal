@@ -7,18 +7,18 @@ const CLOUD_CONFIG = {
 };
 const cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
 
-/* Configurable Receipt Alignment Settings */
-const DEFAULT_RECEIPT_CONFIG = {
-  DATE_X: 759,
-  DATE_Y: 324,
+/* Fixed Receipt Alignment Coordinates */
+const RECEIPT_CONFIG = {
+  DATE_X: 761,
+  DATE_Y: 325,
   DATE_FONT_SIZE: 22,
 
-  NAME_X: 357,
+  NAME_X: 406,
   NAME_Y: 355,
   NAME_FONT_SIZE: 24,
 
-  AMOUNT_X: 535,
-  AMOUNT_Y: 431,
+  AMOUNT_X: 537,
+  AMOUNT_Y: 430,
   AMOUNT_FONT_SIZE: 24,
 
   AMOUNT_WORDS_X: 352,
@@ -32,19 +32,6 @@ const DEFAULT_RECEIPT_CONFIG = {
   TEXT_COLOR: '#941838', // Original dark red/maroon ink color
   FONT_FAMILY: '"Noto Sans Devanagari", sans-serif'
 };
-
-let RECEIPT_CONFIG = JSON.parse(localStorage.getItem('mandal_receipt_config') || 'null') || { ...DEFAULT_RECEIPT_CONFIG };
-
-function saveReceiptConfig() {
-  localStorage.setItem('mandal_receipt_config', JSON.stringify(RECEIPT_CONFIG));
-  toast('Alignment settings saved!');
-}
-
-function resetReceiptConfig() {
-  RECEIPT_CONFIG = { ...DEFAULT_RECEIPT_CONFIG };
-  localStorage.removeItem('mandal_receipt_config');
-  toast('Alignment reset to defaults');
-}
 
 /* Security Helper: HTML Escaping for XSS Prevention */
 function escapeHtml(str) {
@@ -951,7 +938,7 @@ function openBill(image) {
   `);
 }
 
-/* Digital Pavati HTML5 Canvas Image Generator (Configurable Coordinates) */
+/* Digital Pavati HTML5 Canvas Image Generator (Exact Final Coordinates) */
 function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
   return new Promise((resolve) => {
     let img = new Image();
@@ -1018,110 +1005,60 @@ function copyReceiptText(id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
   navigator.clipboard.writeText(receiptText(d));
-  toast('Receipt copied!');
+  toast('Receipt text copied!');
+}
+
+/* Dual Share via WhatsApp (Image + Text via Web Share API or Direct WhatsApp Link) */
+async function sendReceiptWhatsAppWithImage(id) {
+  let d = db.donations.find(x => String(x.id) === String(id));
+  if (!d) return;
+
+  let text = receiptText(d);
+  let canvasDataUrl = await generateReceiptCanvas(d);
+
+  // Try Web Share API (native mobile share sheet sending both image & text directly into WhatsApp)
+  if (canvasDataUrl && navigator.canShare) {
+    try {
+      let res = await fetch(canvasDataUrl);
+      let blob = await res.blob();
+      let file = new File([blob], `pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png`, { type: 'image/png' });
+
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'देणगी पावती - वृंदावन मंडळ',
+          text: text,
+          files: [file]
+        });
+        return;
+      }
+    } catch (err) {
+      console.warn('Native share cancelled/failed, falling back to direct link:', err);
+    }
+  }
+
+  // Fallback: Direct WhatsApp message link
+  let waUrl = getWhatsAppReceiptUrl(d);
+  window.open(waUrl, '_blank');
 }
 
 async function openReceiptModal(id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
   let text = receiptText(d);
-  let waUrl = getWhatsAppReceiptUrl(d);
   let canvasDataUrl = await generateReceiptCanvas(d);
-
-  const makeCoordRow = (label, key, minVal, maxVal, donationId) => `
-    <div style="background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #ebd8c8;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-        <span style="font-weight:600; color:#5a231b;">${label}</span>
-        <input type="number" id="num_${key}" value="${RECEIPT_CONFIG[key]}" style="width:65px; padding:3px 6px; font-weight:700; color:#8b261e; border:1px solid #d4b8a5; border-radius:6px; font-size:12px; text-align:right;" oninput="updateCoord('${key}', this.value, '${donationId}')">
-      </div>
-      <input type="range" id="range_${key}" min="${minVal}" max="${maxVal}" value="${RECEIPT_CONFIG[key]}" style="width:100%; accent-color:#e77426; cursor:pointer;" oninput="updateCoord('${key}', this.value, '${donationId}')">
-    </div>
-  `;
 
   modal(
     'Digital Donation Receipt (पावती)',
     `<div class="receipt-modal-wrap">
       ${canvasDataUrl ? `<div style="text-align:center; margin-bottom:12px;"><img id="receiptCanvasImg" src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);"></div>` : ''}
       
-      <!-- Configurable Alignment Controls Accordion with Live Numbers -->
-      <details class="alignment-details" style="margin-bottom:14px; background:#fff7ee; border:1px solid #f0dabf; border-radius:10px; padding:10px;">
-        <summary style="font-weight:700; color:#8b261e; cursor:pointer; font-size:12px;">⚙️ Live Coordinate Alignment (Fine-Tune Positioning)</summary>
-        <div class="alignment-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; font-size:11px;">
-          ${makeCoordRow('Date X', 'DATE_X', 500, 900, d.id)}
-          ${makeCoordRow('Date Y', 'DATE_Y', 200, 400, d.id)}
-          
-          ${makeCoordRow('Name X', 'NAME_X', 150, 600, d.id)}
-          ${makeCoordRow('Name Y', 'NAME_Y', 250, 450, d.id)}
-          
-          ${makeCoordRow('Amount X', 'AMOUNT_X', 400, 800, d.id)}
-          ${makeCoordRow('Amount Y', 'AMOUNT_Y', 350, 500, d.id)}
-          
-          ${makeCoordRow('Words X', 'AMOUNT_WORDS_X', 200, 600, d.id)}
-          ${makeCoordRow('Words Y', 'AMOUNT_WORDS_Y', 400, 580, d.id)}
-          
-          ${makeCoordRow('Bottom Box X', 'BOTTOM_AMOUNT_X', 50, 350, d.id)}
-          ${makeCoordRow('Bottom Box Y', 'BOTTOM_AMOUNT_Y', 450, 620, d.id)}
-          
-          <div style="grid-column:1/-1; display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
-            <button class="outline-btn" style="padding:6px 12px; font-size:11px;" onclick="resetReceiptConfig();openReceiptModal('${d.id}')">🔄 Reset Defaults</button>
-            <button class="primary-btn" style="padding:6px 12px; font-size:11px;" onclick="saveReceiptConfig()">💾 Save Coordinates</button>
-          </div>
-        </div>
-      </details>
-
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions">
-        ${canvasDataUrl ? `<a id="downloadPngLink" href="${canvasDataUrl}" download="pavati-${d.name.replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px;">🖼️ Download PNG</a>` : ''}
-        ${canvasDataUrl ? `<button onclick="exportReceiptPDF('${d.id}')" class="outline-btn" style="display:inline-flex; align-items:center; gap:4px;">📄 Download PDF</button>` : ''}
         <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
-        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
+        <button onclick="sendReceiptWhatsAppWithImage('${d.id}')" class="primary-btn whatsapp-action-btn" style="display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</button>
       </div>
     </div>`
   );
-}
-
-/* Live Coordinate Update Callback (Syncs sliders & numeric input boxes) */
-async function updateCoord(key, val, donationId) {
-  let numVal = Number(val);
-  RECEIPT_CONFIG[key] = numVal;
-  
-  // Sync input number box and slider
-  let numEl = document.getElementById('num_' + key);
-  let rangeEl = document.getElementById('range_' + key);
-  if (numEl && numEl.value != numVal) numEl.value = numVal;
-  if (rangeEl && rangeEl.value != numVal) rangeEl.value = numVal;
-
-  let d = db.donations.find(x => String(x.id) === String(donationId));
-  if (!d) return;
-  let newCanvasUrl = await generateReceiptCanvas(d, RECEIPT_CONFIG);
-  let img = document.getElementById('receiptCanvasImg');
-  let pngLink = document.getElementById('downloadPngLink');
-  if (img) img.src = newCanvasUrl;
-  if (pngLink) pngLink.href = newCanvasUrl;
-}
-
-/* High-Quality PDF Export Generator */
-async function exportReceiptPDF(donationId) {
-  let d = db.donations.find(x => String(x.id) === String(donationId));
-  if (!d) return;
-  let canvasDataUrl = await generateReceiptCanvas(d, RECEIPT_CONFIG);
-
-  if (window.jspdf) {
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [148, 91] // Standard A6 Landscape format
-    });
-    pdf.addImage(canvasDataUrl, 'PNG', 0, 0, 148, 91);
-    pdf.save(`pavati-${(d.name || 'receipt').replace(/\s+/g, '_')}.pdf`);
-    toast('PDF Receipt Downloaded!');
-  } else {
-    // Print fallback
-    let printWin = window.open('', '_blank');
-    printWin.document.write(`<html><head><title>Receipt PDF</title></head><body style="margin:0;display:grid;place-items:center;height:100vh;"><img src="${canvasDataUrl}" style="max-width:100%;height:auto;" onload="window.print();window.close();"></body></html>`);
-    printWin.document.close();
-  }
 }
 
 /* Grouped Aarti WhatsApp Message Generator with Filtered Assigned Dates Only */
