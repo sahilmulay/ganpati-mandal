@@ -782,7 +782,7 @@ async function submitForm(ev, type, id) {
 
 async function saveItem(type, id, o) {
   let list = db[listName[type]];
-  let index = id ? list.findIndex(x => x.id === id) : -1;
+  let index = id ? list.findIndex(x => String(x.id) === String(id)) : -1;
   if (id) {
     o.id = id;
     o.image = o.image || (list[index] && list[index].image) || '';
@@ -800,7 +800,7 @@ async function saveItem(type, id, o) {
   }
 
   if (!cloud) return;
-  let isCloudId = id && id.includes('-');
+  let isCloudId = id && String(id).includes('-');
   let payload = toCloud(type, o);
   let query = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
   let { data, error } = await query;
@@ -820,7 +820,7 @@ async function saveItem(type, id, o) {
     return;
   }
   let updated = fromCloud(type, data);
-  let localIndex = list.findIndex(x => x.id === o.id);
+  let localIndex = list.findIndex(x => String(x.id) === String(o.id));
   if (localIndex >= 0) list[localIndex] = updated;
   save();
 }
@@ -849,7 +849,7 @@ function manageFinancial(type, id) {
 
 function editItem(type, id) {
   let list = getItemList(type);
-  let x = list.find(i => i.id === id);
+  let x = list.find(i => String(i.id) === String(id));
   if (type === 'donation' || type === 'expense') return manageFinancial(type, id);
   modal('Manage entry', `<p class="delete-text">Edit or remove this ${type} entry.</p><div class="modal-actions"><button class="outline-btn" onclick="openForm('${type}',getItem('${type}','${id}'))">Edit</button><button class="primary-btn" onclick="confirmDelete('${type}','${id}')">Delete</button></div>`);
 }
@@ -859,7 +859,7 @@ function getItemList(type) {
 }
 
 function getItem(type, id) {
-  return getItemList(type).find(x => x.id === id);
+  return getItemList(type).find(x => String(x.id) === String(id));
 }
 
 function confirmDelete(type, id) {
@@ -868,11 +868,11 @@ function confirmDelete(type, id) {
 
 async function deleteItem(type, id) {
   let key = listName[type];
-  db[key] = db[key].filter(x => x.id !== id);
+  db[key] = db[key].filter(x => String(x.id) !== String(id));
   save();
   closeModal();
   toast('Entry deleted');
-  if (cloud && id.includes('-')) {
+  if (cloud && String(id).includes('-')) {
     let { error } = await cloud.from(tableName[type]).delete().eq('id', id);
     if (error) {
       toast('Cloud delete failed.');
@@ -912,37 +912,41 @@ function openBill(image) {
   `);
 }
 
-/* WhatsApp Text Donation Receipt */
+/* WhatsApp Text Donation Receipt Generator */
 function receiptText(d) {
   let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '23758';
   return `॥ श्री गणेशाय नमः ॥\n\n*वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ*\n\n*देणगी पावती क्र.:* ${receiptNo}\n*श्री/श्रीमती:* ${d.name}\n*रक्कम:* ${rupees(d.amount)}/-\n*अक्षरी:* ${numberToMarathiWords(d.amount)}\n*दिनांक:* ${dateLabelInMarathi(d.date)}\n\nआपल्या देणगीबद्दल मनःपूर्वक धन्यवाद!\n\n🙏 *वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ* 🙏`;
 }
 
+function getWhatsAppReceiptUrl(d) {
+  let phone = (d.phone || '').replace(/\D/g, '');
+  if (phone && phone.length === 10) phone = '91' + phone;
+  let text = encodeURIComponent(receiptText(d));
+  return phone ? `https://api.whatsapp.com/send?phone=${phone}&text=${text}` : `https://api.whatsapp.com/send?text=${text}`;
+}
+
+function copyReceiptText(id) {
+  let d = db.donations.find(x => String(x.id) === String(id));
+  if (!d) return;
+  navigator.clipboard.writeText(receiptText(d));
+  toast('Receipt copied!');
+}
+
 function openReceiptModal(id) {
-  let d = db.donations.find(x => x.id === id);
+  let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
   let text = receiptText(d);
+  let waUrl = getWhatsAppReceiptUrl(d);
   modal(
     'WhatsApp Receipt Message',
     `<div class="receipt-modal-wrap">
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions">
-        <button class="outline-btn" onclick="navigator.clipboard.writeText(receiptText(getItem('donation','${id}')));toast('Receipt copied!')">📋 Copy Receipt</button>
-        <button class="primary-btn whatsapp-action-btn" onclick="sendReceiptWhatsApp('${id}')">💬 Send on WhatsApp</button>
+        <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Receipt</button>
+        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
       </div>
     </div>`
   );
-}
-
-function sendReceiptWhatsApp(id) {
-  let d = db.donations.find(x => x.id === id);
-  if (!d) return;
-  let phone = (d.phone || '').replace(/\D/g, '');
-  if (phone && phone.length === 10) phone = '91' + phone;
-
-  let text = encodeURIComponent(receiptText(d));
-  let url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
-  window.open(url, '_blank');
 }
 
 /* Grouped Aarti WhatsApp Message Generator with Filtered Assigned Dates Only */
@@ -997,6 +1001,8 @@ function renderAartiMessageModal() {
     </option>
   `).join('');
 
+  let waAartiUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
   modal(
     'WhatsApp Aarti Message',
     `<div class="aarti-msg-modal">
@@ -1014,7 +1020,7 @@ function renderAartiMessageModal() {
       ${!hasAarti ? `<p class="no-aarti-warning">⚠️ या सत्रासाठी (Session) आरती मानकरी नोंदवलेले नाहीत.</p>` : ''}
       <div class="modal-actions">
         <button class="outline-btn" ${!hasAarti ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} onclick="navigator.clipboard.writeText(aartiWhatsAppMsg('${currentMsgType}','${currentMsgDate}'));toast('Message copied!')">📋 Copy Message</button>
-        <button class="primary-btn whatsapp-action-btn" ${!hasAarti ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} onclick="window.open('https://wa.me/?text='+encodeURIComponent(aartiWhatsAppMsg('${currentMsgType}','${currentMsgDate}')),'_blank')">💬 Send on WhatsApp</button>
+        <a href="${waAartiUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px; ${!hasAarti ? 'pointer-events:none;opacity:0.5;' : ''}">💬 Send on WhatsApp</a>
       </div>
     </div>`
   );
