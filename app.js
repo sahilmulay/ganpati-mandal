@@ -7,6 +7,17 @@ const CLOUD_CONFIG = {
 };
 const cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
 
+/* Service Worker Registration for PWA & Full Offline Support */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      console.log('[PWA] ServiceWorker active for offline mandap use:', reg.scope);
+    }).catch(err => {
+      console.warn('[PWA] ServiceWorker registration skipped:', err);
+    });
+  });
+}
+
 /* Fixed Receipt Alignment Coordinates */
 const RECEIPT_CONFIG = {
   DATE_X: 761,
@@ -650,7 +661,7 @@ function contacts() {
   );
 }
 
-/* Reports Page */
+/* Reports Page with One-Click Audit Report Bundle Generator */
 function reports() {
   let inc = sum(db.donations), exp = sum(db.expenses), cats = {};
   db.expenses.forEach(e => cats[e.category] = (cats[e.category] || 0) + Number(e.amount));
@@ -661,7 +672,7 @@ function reports() {
       <input class="filter" type="date" value="2026-08-01">
       <input class="filter" type="date" value="${today}">
       <button class="outline-btn" onclick="exportCSV()">↓ Export CSV</button>
-      <button class="primary-btn" onclick="window.print()">Print / PDF</button>
+      <button class="primary-btn" onclick="openAuditReportBundle()">📦 Audit Report Bundle</button>
     </div>
     <div class="card">
       <div class="report-totals">
@@ -681,6 +692,107 @@ function reports() {
       </div>
     </div>`
   );
+}
+
+/* One-Click Executive Audit Report Bundle Generator */
+function openAuditReportBundle() {
+  let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
+  let sortedDonations = [...db.donations].sort((a, b) => a.date.localeCompare(b.date));
+  let sortedExpenses = [...db.expenses].sort((a, b) => a.date.localeCompare(b.date));
+  let cats = {};
+  db.expenses.forEach(e => cats[e.category] = (cats[e.category] || 0) + Number(e.amount));
+
+  let auditWin = window.open('', '_blank');
+  if (!auditWin) return toast('Pop-up blocked! Please allow pop-ups to open Audit Report.');
+
+  auditWin.document.write(`
+    <!DOCTYPE html>
+    <html lang="mr">
+    <head>
+      <meta charset="UTF-8">
+      <title>वार्षिक जमा-खर्च हिशोब - वृंदावन कला क्रीडा व सांस्कृतिक मंडळ</title>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700;800&display=swap" rel="stylesheet">
+      <style>
+        body { font-family: 'Noto Sans Devanagari', sans-serif; margin: 30px; color: #1f2937; background: #fff; line-height: 1.5; }
+        .header { text-align: center; border-bottom: 3px double #941838; padding-bottom: 15px; margin-bottom: 20px; }
+        .header h1 { color: #941838; margin: 0; font-size: 26px; }
+        .header p { margin: 4px 0 0 0; color: #4b5563; font-size: 14px; }
+        .reg-no { font-weight: 700; color: #8b261e; }
+        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
+        .stat-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; background: #fdfbf7; }
+        .stat-box span { font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; }
+        .stat-box b { display: block; font-size: 20px; color: #941838; margin-top: 4px; }
+        .section-title { font-size: 16px; font-weight: 700; color: #941838; border-left: 4px solid #941838; padding-left: 10px; margin: 25px 0 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+        th, td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; }
+        th { background: #f3f4f6; font-weight: 700; color: #374151; }
+        .text-right { text-align: right; }
+        .print-bar { background: #f9fafb; border: 1px solid #e5e7eb; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-print { background: #941838; color: white; border: none; padding: 8px 18px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        @media print { .print-bar { display: none; } body { margin: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="print-bar">
+        <span><b>📦 वृंदावन मंडळ - वार्षिक हिशोब अहवाल (Audit Report Bundle)</b></span>
+        <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+      </div>
+
+      <div class="header">
+        <h1>॥ श्री गणेशाय नमः ॥</h1>
+        <h2 style="margin:6px 0; color:#941838;">वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h2>
+        <p>६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <span class="reg-no">नोंदणी क्र. महा/२२०/१४</span></p>
+        <p><b>वार्षिक जमा-खर्च व हिशोब अहवाल (Audit Summary Report)</b> — दिनांक: ${dateLabelInMarathi(today)}</p>
+      </div>
+
+      <div class="summary-grid">
+        <div class="stat-box"><span>एकूण जमा (Total Collection)</span><b>${rupees(inc)}</b></div>
+        <div class="stat-box"><span>एकूण खर्च (Total Expenses)</span><b>${rupees(exp)}</b></div>
+        <div class="stat-box"><span>उर्वरित शिल्लक (Net Balance)</span><b>${rupees(bal)}</b></div>
+      </div>
+
+      <div class="section-title">१. प्रकारानुसार खर्च तपशील (Category-wise Expense Breakdown)</div>
+      <table>
+        <thead><tr><th>अ.क्र.</th><th>खर्च प्रकार (Category)</th><th class="text-right">रक्कम (Amount)</th></tr></thead>
+        <tbody>
+          ${Object.entries(cats).map(([k, v], i) => `<tr><td>${i + 1}</td><td>${escapeHtml(k)}</td><td class="text-right">${rupees(v)}</td></tr>`).join('')}
+          <tr style="font-weight:700; background:#f9fafb;">
+            <td colspan="2">एकूण खर्च (Total Expenditure)</td>
+            <td class="text-right" style="color:#941838;">${rupees(exp)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">२. देणगी व वर्गणी नोंदवही (Donation Register)</div>
+      <table>
+        <thead><tr><th>अ.क्र.</th><th>दिनांक</th><th>देणगीदार नाव (Contributor)</th><th>प्रकार</th><th class="text-right">रक्कम</th></tr></thead>
+        <tbody>
+          ${sortedDonations.map((d, i) => `<tr><td>${i + 1}</td><td>${dateLabelInMarathi(d.date)}</td><td>${escapeHtml(d.name)}</td><td>${escapeHtml(d.mode)}</td><td class="text-right">${rupees(d.amount)}</td></tr>`).join('')}
+          <tr style="font-weight:700; background:#f9fafb;">
+            <td colspan="4">एकूण जमा देणगी (Total Collections)</td>
+            <td class="text-right" style="color:#2b783c;">${rupees(inc)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">३. खर्च नोंदवही व बिल जोडपत्र (Expense Ledger & Bills Appendix)</div>
+      <table>
+        <thead><tr><th>अ.क्र.</th><th>दिनांक</th><th>खर्च तपशील (Description)</th><th>खर्च प्रकार</th><th>जबाबदार सदस्य (Paid By)</th><th class="text-right">रक्कम</th></tr></thead>
+        <tbody>
+          ${sortedExpenses.map((e, i) => `<tr><td>${i + 1}</td><td>${dateLabelInMarathi(e.date)}</td><td>${escapeHtml(e.description)}</td><td>${escapeHtml(e.category)}</td><td>${escapeHtml(e.paidBy)}</td><td class="text-right">${rupees(e.amount)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+
+      <div style="margin-top:50px; display:flex; justify-content:space-between; text-align:center; font-weight:700;">
+        <div>अध्यक्ष<br><br>_________________</div>
+        <div>उपाध्यक्ष<br><br>_________________</div>
+        <div>सेक्रेटरी<br><br>_________________</div>
+        <div>खजिनदार<br><br>_________________</div>
+      </div>
+    </body>
+    </html>
+  `);
+  auditWin.document.close();
 }
 
 function time12(t) {
@@ -1122,7 +1234,7 @@ function renderAartiMessageModal() {
     `<div class="aarti-msg-modal">
       <div class="msg-type-tabs">
         <button class="tab ${currentMsgType === 'Morning' ? 'active' : ''}" onclick="switchMsgType('Morning')">🌅 Morning Aarti (९:०० AM)</button>
-        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')"><ctrl42> Evening Aarti (८:०० PM)</button>
+        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')">🌆 Evening Aarti (८:०० PM)</button>
       </div>
       <div class="msg-date-select">
         <label>आरती दिनांक (Assigned Dates Only):</label>

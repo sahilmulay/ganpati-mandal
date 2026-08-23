@@ -1,0 +1,32 @@
+{
+  "name": "वृंदावन कला क्रीडा व सांस्कृतिक मंडळ Manager",
+  "short_name": "वृंदावन मंडळ",
+  "description": "Ganpati Mandal Management App - Financials, Aarti Timetable, Receipts & Notices",
+  "start_url": "./dashboard.html",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#9f2e20",
+  "theme_color": "#9f2e20",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add Donation",
+      "short_name": "Donation",
+      "url": "./donations.html",
+      "icons": [{ "src": "assets/icon.svg", "sizes": "512x512" }]
+    },
+    {
+      "name": "Aarti Schedule",
+      "short_name": "Aarti",
+      "url": "./aarti.html",
+      "icons": [{ "src": "assets/icon.svg", "sizes": "512x512" }]
+    }
+  ]
+}
