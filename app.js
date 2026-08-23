@@ -161,7 +161,7 @@ let currentMsgType = 'Morning';
 let currentMsgDate = today;
 
 const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar' };
-const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar' };
+const listName = { donation: 'donations', expense: 'expenses', aartis: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar' };
 
 function fromCloud(type, row) {
   if (type === 'expense') return { ...row, paidBy: row.paid_by, image: row.image_url };
@@ -274,7 +274,7 @@ function render() {
   if (target) target.innerHTML = p();
 }
 
-/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD (Mobile Optimized, Zero Admin) */
+/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD (Reordered & Limit 4 Items with Expandable Toggle) */
 function publicView() {
   let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
   let alankars = [...(db.alankar || [])].sort((a, b) => b.date.localeCompare(a.date));
@@ -296,26 +296,32 @@ function publicView() {
     </div>
   `).join('') : '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो अपलोड केलेले नाहीत.</div>';
 
-  let donationRows = sortedDonations.map(d => `
-    <tr>
-      <td>${dateLabelInMarathi(d.date)}</td>
-      <td><strong>${escapeHtml(d.name)}</strong></td>
-      <td><span class="tag morning">${escapeHtml(d.mode)}</span></td>
-      <td class="amount income-t">${rupees(d.amount)}</td>
-    </tr>
-  `).join('');
+  let donationRows = sortedDonations.map((d, index) => {
+    let isExtra = index >= 4;
+    return `
+      <tr class="${isExtra ? 'extra-donation-row' : ''}" style="${isExtra ? 'display:none;' : ''}">
+        <td>${dateLabelInMarathi(d.date)}</td>
+        <td><strong>${escapeHtml(d.name)}</strong></td>
+        <td><span class="tag morning">${escapeHtml(d.mode)}</span></td>
+        <td class="amount income-t">${rupees(d.amount)}</td>
+      </tr>
+    `;
+  }).join('');
 
-  let expenseRows = sortedExpenses.map(e => `
-    <tr>
-      <td>${dateLabelInMarathi(e.date)}</td>
-      <td>
-        <strong>${escapeHtml(e.description)}</strong>
-        <br><small class="muted">${escapeHtml(e.category)} • Paid by ${escapeHtml(e.paidBy)}</small>
-      </td>
-      <td class="amount expense-t">${rupees(e.amount)}</td>
-      <td>${e.image ? `<button class="text-link view-bill-btn" onclick="openBill('${e.image}')">👁 Bill</button>` : '—'}</td>
-    </tr>
-  `).join('');
+  let expenseRows = sortedExpenses.map((e, index) => {
+    let isExtra = index >= 4;
+    return `
+      <tr class="${isExtra ? 'extra-expense-row' : ''}" style="${isExtra ? 'display:none;' : ''}">
+        <td>${dateLabelInMarathi(e.date)}</td>
+        <td>
+          <strong>${escapeHtml(e.description)}</strong>
+          <br><small class="muted">${escapeHtml(e.category)} • Paid by ${escapeHtml(e.paidBy)}</small>
+        </td>
+        <td class="amount expense-t">${rupees(e.amount)}</td>
+        <td>${e.image ? `<button class="text-link view-bill-btn" onclick="openBill('${e.image}')">👁 Bill</button>` : '—'}</td>
+      </tr>
+    `;
+  }).join('');
 
   return `
     <div class="public-container">
@@ -338,7 +344,7 @@ function publicView() {
         </div>
       </div>
 
-      <!-- Section 2: Transparency Financial Stats -->
+      <!-- Section 2: Financial Summary Cards -->
       <section class="stats" style="margin-bottom:20px;">
         <div class="stat-card income">
           <div class="stat-head"><span>एकूण जमा (Total Collection)</span><span class="stat-icon">↗</span></div>
@@ -354,19 +360,7 @@ function publicView() {
         </div>
       </section>
 
-      <!-- Section 3: Transparency Financial Ledgers -->
-      <div class="layout-split" style="margin-bottom:20px;">
-        <div class="card">
-          <div class="card-title"><h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3></div>
-          ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody>${donationRows}</tbody>`)}
-        </div>
-        <div class="card">
-          <div class="card-title"><h3>💸 खर्च नोंदी व बिल माहिती (Expense Ledger)</h3></div>
-          ${tableWrap(`<thead><tr><th>दिनांक</th><th>खर्च तपशील</th><th>रक्कम</th><th>बिल</th></tr></thead><tbody>${expenseRows}</tbody>`)}
-        </div>
-      </div>
-
-      <!-- Section 4: Aarti Timetable & Upcoming Events -->
+      <!-- Section 3: Aarti Timetable & Upcoming Events (Positioned ABOVE Expenses/Donations) -->
       <div class="layout-split" style="margin-bottom:20px;">
         <div class="card">
           <div class="card-title"><h3>🪔 आगामी आरती वेळापत्रक (Aarti Timetable)</h3></div>
@@ -380,11 +374,55 @@ function publicView() {
         </div>
       </div>
 
+      <!-- Section 4: Transparency Financial Ledgers (Recent 4 Items + Expandable Toggle) -->
+      <div class="layout-split" style="margin-bottom:20px;">
+        <div class="card">
+          <div class="card-title"><h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3></div>
+          ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody>${donationRows}</tbody>`)}
+          ${sortedDonations.length > 4 ? `
+            <div style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px dashed #e8d5c4;">
+              <button id="publicDonationToggleBtn" class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="togglePublicDonations()">
+                ▼ View all donations (सर्व देणगीदार पहा - ${sortedDonations.length})
+              </button>
+            </div>
+          ` : ''}
+        </div>
+        <div class="card">
+          <div class="card-title"><h3>💸 खर्च नोंदी व बिल माहिती (Expense Ledger)</h3></div>
+          ${tableWrap(`<thead><tr><th>दिनांक</th><th>खर्च तपशील</th><th>रक्कम</th><th>बिल</th></tr></thead><tbody>${expenseRows}</tbody>`)}
+          ${sortedExpenses.length > 4 ? `
+            <div style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px dashed #e8d5c4;">
+              <button id="publicExpenseToggleBtn" class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="togglePublicExpenses()">
+                ▼ View all expenses (सर्व खर्च पहा - ${sortedExpenses.length})
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+
       <div style="text-align:center; padding:16px; color:#6b7280; font-size:11px; border-top:1px solid #e5e7eb;">
         🙏 <b>वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</b> परिवार | सर्व हक्क सुरक्षित 🙏
       </div>
     </div>
   `;
+}
+
+function togglePublicDonations() {
+  let extraRows = document.querySelectorAll('.extra-donation-row');
+  let btn = document.getElementById('publicDonationToggleBtn');
+  if (!extraRows.length || !btn) return;
+  let isHidden = extraRows[0].style.display === 'none';
+  extraRows.forEach(r => r.style.display = isHidden ? '' : 'none');
+  btn.textContent = isHidden ? '▲ Hide extra donations (कम दाखवा)' : `▼ View all donations (सर्व देणगीदार पहा - ${db.donations.length})`;
+}
+
+function togglePublicExpenses() {
+  let extraRows = document.querySelectorAll('.extra-expense-row');
+  let btn = document.getElementById('publicExpenseToggleBtn');
+  if (!extraRows.length || !btn) return;
+  let isHidden = extraRows[0].style.display === 'none';
+  extraRows.forEach(r => r.style.display = isHidden ? '' : 'none');
+  btn.textContent = isHidden ? '▲ Hide extra expenses (कम दाखवा)' : `▼ View all expenses (सर्व खर्च पहा - ${db.expenses.length})`;
 }
 
 /* Dashboard Page */
@@ -1072,6 +1110,13 @@ function openForm(type, item = null) {
       <div class="field full"><label>Name</label><input name="name" required value="${escapeHtml(x.name || '')}"></div>
       <div class="field"><label>Role / designation</label><input name="role" required value="${escapeHtml(x.role || '')}"></div>
       <div class="field"><label>Phone number</label><input name="phone" required inputmode="tel" value="${escapeHtml(x.phone || '')}"></div>
+    `,
+    alankar: `
+      <div class="field full"><label>Title / Decoration details</label><input name="title" required value="${escapeHtml(x.title || '')}"></div>
+      <div class="field"><label>Date</label><input name="date" type="date" value="${x.date || today}"></div>
+      <div class="field full"><label>Bappa Photo</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+      <div class="field full" id="billFormPreview"></div>
+      <div class="field full"><label>Optional note</label><textarea name="note">${escapeHtml(x.note || '')}</textarea></div>
     `
   }[type];
 
