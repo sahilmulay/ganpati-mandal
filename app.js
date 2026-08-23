@@ -133,7 +133,7 @@ const seed = {
     { id: 'c4', name: 'Neha Kulkarni', role: 'Event Coordinator', phone: '9876543213' }
   ],
   alankar: [
-    { id: 'k1', title: 'प्रथम दिन - श्री गणेश स्थापना व महाआरती', date: today, image: 'assets/receipt_template.png', note: 'विशेष सुंदर पुष्प सजावट व अलंकार' }
+    { id: 'k1', title: 'प्रथम दिन - श्री गणेश स्थापना व महाआरती', date: today, image: 'assets/receipt_template.png', note: 'विशेष सुंदर पुष्प सजावट व मुख्य मुखदर्शन' }
   ]
 };
 
@@ -221,7 +221,7 @@ window.addEventListener('storage', () => {
 const nav = [
   ['dashboard.html', 'dashboard', '⌂', 'Dashboard'],
   ['donations.html', 'donations', '₹', 'Donations'],
-  ['expenses.html', 'expenses', '◫', 'Expenses'],
+  ['expenses.html', 'expenses', '💸', 'Expenses'],
   ['aarti.html', 'aarti', '☀', 'Aarti Timetable'],
   ['events.html', 'events', '✦', 'Events & Notices'],
   ['contacts.html', 'contacts', '☏', 'Committee Contacts'],
@@ -274,7 +274,7 @@ function render() {
   if (target) target.innerHTML = p();
 }
 
-/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD (Zero Admin Capabilities) */
+/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD (Mobile Optimized, Zero Admin) */
 function publicView() {
   let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
   let alankars = [...(db.alankar || [])].sort((a, b) => b.date.localeCompare(a.date));
@@ -286,7 +286,7 @@ function publicView() {
   let galleryHtml = alankars.length ? alankars.map(item => `
     <div class="alankar-card" onclick="openBill('${item.image}')">
       <div class="alankar-img-wrap">
-        <img src="${item.image}" alt="${escapeHtml(item.title)}">
+        <img src="${item.image}" alt="${escapeHtml(item.title)}" loading="lazy">
         <span class="alankar-date-tag">📅 ${dateLabelInMarathi(item.date)}</span>
       </div>
       <div class="alankar-info">
@@ -318,28 +318,28 @@ function publicView() {
   `).join('');
 
   return `
-    <div class="public-container" style="max-width:1100px; margin:0 auto; padding:16px;">
+    <div class="public-container">
       <!-- Public Header Banner -->
-      <div class="public-header" style="text-align:center; background:linear-gradient(135deg, #941838, #6d1028); color:#fff; padding:28px 18px; border-radius:18px; box-shadow:0 8px 25px rgba(148,24,56,0.25); margin-bottom:24px;">
-        <div style="font-size:36px; margin-bottom:4px;">॥ श्री गणेशाय नमः ॥</div>
-        <h1 style="margin:6px 0; font-size:24px; font-weight:800; color:#fff;">वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h1>
-        <p style="margin:4px 0 12px 0; opacity:0.9; font-size:13px;">६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <b>नोंदणी क्र. महा/२२०/१४</b></p>
-        <span style="background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); border-radius:30px; padding:6px 16px; font-size:12px; font-weight:600; letter-spacing:0.5px;">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
+      <div class="public-header">
+        <div style="font-size:30px; margin-bottom:2px;">॥ श्री गणेशाय नमः ॥</div>
+        <h1>वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h1>
+        <p style="margin:4px 0 10px 0; opacity:0.9; font-size:12px;">६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <b>नोंदणी क्र. महा/२२०/१४</b></p>
+        <span class="public-header-badge">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
       </div>
 
       <!-- Section 1: Daily Bappa Alankar & Mukh Darshan Gallery -->
-      <div class="card" style="margin-bottom:24px;">
-        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन व पूजा अलंकार (Daily Darshan Gallery)</h3>
-          <span style="font-size:11px; color:#8b261e; font-weight:600;">(फोटोवर क्लिक करून पूर्ण फोटो पहा)</span>
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन व पूजा अलंकार (${alankars.length} फोटो)</h3>
+          <span style="font-size:11px; color:#8b261e; font-weight:600;">(फोटोवर टॅप करून झूम करा)</span>
         </div>
-        <div class="alankar-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:12px;">
+        <div class="alankar-grid">
           ${galleryHtml}
         </div>
       </div>
 
       <!-- Section 2: Transparency Financial Stats -->
-      <section class="stats" style="margin-bottom:24px;">
+      <section class="stats" style="margin-bottom:20px;">
         <div class="stat-card income">
           <div class="stat-head"><span>एकूण जमा (Total Collection)</span><span class="stat-icon">↗</span></div>
           <div class="money">${rupees(inc)}</div>
@@ -349,25 +349,25 @@ function publicView() {
           <div class="money">${rupees(exp)}</div>
         </div>
         <div class="stat-card balance">
-          <div class="stat-head"><span>शिल्लक (Available Balance)</span><span class="stat-icon">◈</span></div>
+          <div class="stat-head"><span>शिल्लक (Net Balance)</span><span class="stat-icon">◈</span></div>
           <div class="money">${rupees(bal)}</div>
         </div>
       </section>
 
       <!-- Section 3: Transparency Financial Ledgers -->
-      <div class="layout-split" style="margin-bottom:24px;">
+      <div class="layout-split" style="margin-bottom:20px;">
         <div class="card">
           <div class="card-title"><h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3></div>
           ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody>${donationRows}</tbody>`)}
         </div>
         <div class="card">
-          <div class="card-title"><h3>◫ खर्च नोंदी व बिलांची माहिती (Expense Ledger)</h3></div>
+          <div class="card-title"><h3>💸 खर्च नोंदी व बिल माहिती (Expense Ledger)</h3></div>
           ${tableWrap(`<thead><tr><th>दिनांक</th><th>खर्च तपशील</th><th>रक्कम</th><th>बिल</th></tr></thead><tbody>${expenseRows}</tbody>`)}
         </div>
       </div>
 
       <!-- Section 4: Aarti Timetable & Upcoming Events -->
-      <div class="layout-split" style="margin-bottom:24px;">
+      <div class="layout-split" style="margin-bottom:20px;">
         <div class="card">
           <div class="card-title"><h3>🪔 आगामी आरती वेळापत्रक (Aarti Timetable)</h3></div>
           <div class="aarti-list">
@@ -380,7 +380,7 @@ function publicView() {
         </div>
       </div>
 
-      <div style="text-align:center; padding:18px; color:#6b7280; font-size:12px; border-top:1px solid #e5e7eb;">
+      <div style="text-align:center; padding:16px; color:#6b7280; font-size:11px; border-top:1px solid #e5e7eb;">
         🙏 <b>वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</b> परिवार | सर्व हक्क सुरक्षित 🙏
       </div>
     </div>
@@ -416,7 +416,7 @@ function dashboard() {
         </div>
         <div class="quick-actions">
           <button class="quick-btn" onclick="openForm('donation')"><span>₹</span>Add Donation</button>
-          <button class="quick-btn" onclick="openForm('expense')"><span>◫</span>Add Expense</button>
+          <button class="quick-btn" onclick="openForm('expense')"><span>💸</span>Add Expense</button>
           <button class="quick-btn" onclick="openForm('aarti')"><span>🪔</span>Add Aarti</button>
           <button class="quick-btn highlight-quick" onclick="openPaymentQR()"><span>▣</span>Collect QR</button>
           <button class="quick-btn" onclick="openAlankarForm()"><span>🌺</span>Add Darshan Photo</button>
@@ -821,23 +821,62 @@ function reports() {
   );
 }
 
+/* Form Uploader supporting Single or Multiple Bappa Alankar Photos */
 function openAlankarForm() {
   modal(
     'Upload Daily Bappa Mukh Darshan Photo',
-    `<form onsubmit="submitForm(event,'alankar','')">
+    `<form onsubmit="submitAlankarForm(event)">
       <div class="form-grid">
-        <div class="field full"><label>Title / Decoration details</label><input name="title" required placeholder="e.g. द्वितीय दिन - पुष्प शृंगार पूजा"></div>
+        <div class="field full"><label>Title / Decoration details</label><input name="title" required placeholder="e.g. प्रथम दिन - पुष्प शृंगार पूजा"></div>
         <div class="field"><label>Date</label><input name="date" type="date" value="${today}"></div>
-        <div class="field full"><label>Bappa Photo</label><input name="image" type="file" accept="image/*" required onchange="previewBillInput(this)"></div>
-        <div class="field full" id="billFormPreview"></div>
-        <div class="field full"><label>Optional note</label><textarea name="note" placeholder="e.g. आजची विशेष आरती व पुष्प सजावट"></textarea></div>
+        <div class="field full"><label>Select Bappa Photo(s) (Multiple allowed)</label><input name="image" type="file" accept="image/*" multiple required onchange="previewMultiInput(this)"></div>
+        <div class="field full" id="multiPhotoPreview" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;"></div>
+        <div class="field full"><label>Optional note</label><textarea name="note" placeholder="e.g. आजची विशेष महाआरती व पुष्प सजावट"></textarea></div>
       </div>
       <div class="modal-actions">
         <button type="button" class="outline-btn" onclick="closeModal()">Cancel</button>
-        <button class="primary-btn">Upload Photo</button>
+        <button class="primary-btn">Upload Photos</button>
       </div>
     </form>`
   );
+}
+
+function previewMultiInput(input) {
+  let files = input.files;
+  let container = document.getElementById('multiPhotoPreview');
+  if (!container || !files || !files.length) return;
+  container.innerHTML = `<small style="width:100%; font-weight:600; color:#941838;">Selected ${files.length} photo(s). Compressing for optimal storage…</small>`;
+}
+
+async function submitAlankarForm(ev) {
+  ev.preventDefault();
+  let f = new FormData(ev.target);
+  let title = f.get('title');
+  let date = f.get('date') || today;
+  let note = f.get('note') || '';
+  let input = ev.target.querySelector('input[type="file"]');
+  let files = input && input.files ? Array.from(input.files).filter(file => file && file.size && file.type.startsWith('image/')) : [];
+
+  if (!files.length) return toast('Please select at least one photo');
+
+  toast(`Uploading ${files.length} photo(s)…`);
+  for (let file of files) {
+    let compressedUrl = await compressImage(file, 1000, 0.75);
+    let item = {
+      id: 'k' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100),
+      title: title,
+      date: date,
+      note: note,
+      image: compressedUrl
+    };
+    db.alankar.unshift(item);
+    if (cloud) {
+      cloud.from('alankar').insert(toCloud('alankar', item)).then(() => {}).catch(err => console.warn(err));
+    }
+  }
+  save();
+  closeModal();
+  toast(`${files.length} Bappa photo(s) uploaded!`);
 }
 
 /* One-Click Executive Audit Report Bundle Generator */
@@ -1033,13 +1072,6 @@ function openForm(type, item = null) {
       <div class="field full"><label>Name</label><input name="name" required value="${escapeHtml(x.name || '')}"></div>
       <div class="field"><label>Role / designation</label><input name="role" required value="${escapeHtml(x.role || '')}"></div>
       <div class="field"><label>Phone number</label><input name="phone" required inputmode="tel" value="${escapeHtml(x.phone || '')}"></div>
-    `,
-    alankar: `
-      <div class="field full"><label>Title / Decoration details</label><input name="title" required value="${escapeHtml(x.title || '')}"></div>
-      <div class="field"><label>Date</label><input name="date" type="date" value="${x.date || today}"></div>
-      <div class="field full"><label>Bappa Photo</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
-      <div class="field full" id="billFormPreview"></div>
-      <div class="field full"><label>Optional note</label><textarea name="note">${escapeHtml(x.note || '')}</textarea></div>
     `
   }[type];
 
