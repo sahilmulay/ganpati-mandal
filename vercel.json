@@ -1,4 +1,11 @@
 {
-  "cleanUrls": true,
-  "trailingSlash": false
+  "rewrites": [
+    { "source": "/dashboard", "destination": "/dashboard.html" },
+    { "source": "/donations", "destination": "/donations.html" },
+    { "source": "/expenses", "destination": "/expenses.html" },
+    { "source": "/aarti", "destination": "/aarti.html" },
+    { "source": "/events", "destination": "/events.html" },
+    { "source": "/contacts", "destination": "/contacts.html" },
+    { "source": "/reports", "destination": "/reports.html" }
+  ]
 }
