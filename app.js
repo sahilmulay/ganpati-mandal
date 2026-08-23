@@ -186,17 +186,35 @@ function toCloud(type, row) {
   return copy;
 }
 
+/* Resilient Per-Table Independent Cloud Loader & Auto-Sync Polling */
 async function loadCloud() {
   if (!cloud) return;
-  try {
-    let types = Object.keys(tableName);
-    let results = await Promise.all(types.map(type => cloud.from(tableName[type]).select('*')));
-    if (results.some(r => r.error)) throw results.find(r => r.error).error;
-    types.forEach((type, index) => db[listName[type]] = results[index].data.map(row => fromCloud(type, row)));
+  let types = Object.keys(tableName);
+
+  let updatedAny = false;
+  await Promise.allSettled(types.map(async (type) => {
+    try {
+      let { data, error } = await cloud.from(tableName[type]).select('*');
+      if (error) {
+        if (error.code === 'PGRST205') {
+          // Table missing in Supabase schema (e.g. alankar), keep local state safely without breaking other tables
+          return;
+        }
+        console.warn(`Supabase ${type} fetch error:`, error.message);
+        return;
+      }
+      if (Array.isArray(data) && data.length) {
+        db[listName[type]] = data.map(row => fromCloud(type, row));
+        updatedAny = true;
+      }
+    } catch (err) {
+      console.warn(`Cloud load error for ${type}:`, err);
+    }
+  }));
+
+  if (updatedAny) {
     localStorage.setItem('ganesh-mandal-data', JSON.stringify(db));
     render();
-  } catch (error) {
-    console.warn('Cloud data unavailable:', error.message);
   }
 }
 
@@ -204,6 +222,13 @@ function subscribeCloud() {
   if (!cloud) return;
   cloud.channel('mandal-live-updates').on('postgres_changes', { event: '*', schema: 'public' }, () => loadCloud()).subscribe();
 }
+
+/* Background Polling & Window Focus Listeners for Instant Multi-Device Sync */
+setInterval(loadCloud, 8000); // Auto-syncs across mobile & laptop every 8 seconds
+window.addEventListener('focus', loadCloud); // Syncs immediately when user switches to app tab
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') loadCloud();
+});
 
 function save() {
   localStorage.setItem('ganesh-mandal-data', JSON.stringify(db));
@@ -1172,27 +1197,40 @@ async function saveItem(type, id, o) {
   if (!cloud) return;
   let isCloudId = id && String(id).includes('-');
   let payload = toCloud(type, o);
-  let query = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
-  let { data, error } = await query;
 
-  // Smart retry: if 'phone' column hasn't been added to Supabase donations table yet, retry without 'phone'
-  if (error && error.code === 'PGRST204' && type === 'donation' && 'phone' in payload) {
-    delete payload.phone;
-    let retryQuery = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
-    let res = await retryQuery;
-    data = res.data;
-    error = res.error;
-  }
+  try {
+    let query = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
+    let { data, error } = await query;
 
-  if (error) {
-    toast('Saved locally, but cloud sync failed.');
-    console.warn('Supabase Error:', error);
-    return;
+    // Smart retry: if 'phone' column hasn't been added to Supabase donations table yet, retry without 'phone'
+    if (error && error.code === 'PGRST204' && type === 'donation' && 'phone' in payload) {
+      delete payload.phone;
+      let retryQuery = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
+      let res = await retryQuery;
+      data = res.data;
+      error = res.error;
+    }
+
+    if (error) {
+      if (error.code === 'PGRST205') {
+        // Table missing in Supabase schema (e.g. alankar), saved locally
+        return;
+      }
+      toast('Saved locally, but cloud sync failed.');
+      console.warn('Supabase Error:', error);
+      return;
+    }
+
+    if (data) {
+      let updated = fromCloud(type, data);
+      let localIndex = list.findIndex(x => String(x.id) === String(o.id));
+      if (localIndex >= 0) list[localIndex] = updated;
+      save();
+      loadCloud(); // Trigger sync across devices
+    }
+  } catch (err) {
+    console.warn('Save item cloud sync error:', err);
   }
-  let updated = fromCloud(type, data);
-  let localIndex = list.findIndex(x => String(x.id) === String(o.id));
-  if (localIndex >= 0) list[localIndex] = updated;
-  save();
 }
 
 function guardEdit(type, id) {
@@ -1464,7 +1502,7 @@ function renderAartiMessageModal() {
     `<div class="aarti-msg-modal">
       <div class="msg-type-tabs">
         <button class="tab ${currentMsgType === 'Morning' ? 'active' : ''}" onclick="switchMsgType('Morning')">🌅 Morning Aarti (९:०० AM)</button>
-        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')">🌆 Evening Aarti (८:०० PM)</button>
+        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')"><ctrl42> Evening Aarti (८:०० PM)</button>
       </div>
       <div class="msg-date-select">
         <label>आरती दिनांक (Assigned Dates Only):</label>
