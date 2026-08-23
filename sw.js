@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mandal-app-v2';
+const CACHE_NAME = 'mandal-app-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   './events.html',
   './contacts.html',
   './reports.html',
+  './public.html',
   './dashboard',
   './donations',
   './expenses',
@@ -16,6 +17,7 @@ const ASSETS = [
   './events',
   './contacts',
   './reports',
+  './public',
   './style.css',
   './app.js',
   './manifest.json',
@@ -74,7 +76,7 @@ self.addEventListener('fetch', event => {
         return caches.match(altPath).then(altResponse => {
           if (altResponse) return altResponse;
           if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('./dashboard.html') || caches.match('./index.html');
+            return caches.match('./public.html') || caches.match('./dashboard.html');
           }
         });
       });

@@ -6,6 +6,7 @@
     { "source": "/aarti", "destination": "/aarti.html" },
     { "source": "/events", "destination": "/events.html" },
     { "source": "/contacts", "destination": "/contacts.html" },
-    { "source": "/reports", "destination": "/reports.html" }
+    { "source": "/reports", "destination": "/reports.html" },
+    { "source": "/public", "destination": "/public.html" }
   ]
 }

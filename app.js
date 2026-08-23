@@ -131,15 +131,20 @@ const seed = {
     { id: 'c2', name: 'Anita Patil', role: 'Treasurer', phone: '9876543211' },
     { id: 'c3', name: 'Mahesh More', role: 'Secretary', phone: '9876543212' },
     { id: 'c4', name: 'Neha Kulkarni', role: 'Event Coordinator', phone: '9876543213' }
+  ],
+  alankar: [
+    { id: 'k1', title: 'प्रथम दिन - श्री गणेश स्थापना व महाआरती', date: today, image: 'assets/receipt_template.png', note: 'विशेष सुंदर पुष्प सजावट व अलंकार' }
   ]
 };
 
 let db = JSON.parse(localStorage.getItem('ganesh-mandal-data') || 'null') || seed;
+if (!db.alankar) db.alankar = seed.alankar;
 db.aartis.forEach(a => a.time = a.type === 'Morning' ? '09:00' : '20:00');
 
 /* Multi-Page Route Detection */
 function detectCurrentPage() {
   let path = (window.location.pathname || '').split('/').pop().toLowerCase();
+  if (path.includes('public')) return 'public';
   if (path.includes('donations')) return 'donations';
   if (path.includes('expenses')) return 'expenses';
   if (path.includes('aarti')) return 'aarti';
@@ -155,12 +160,13 @@ let aartiFilter = 'all';
 let currentMsgType = 'Morning';
 let currentMsgDate = today;
 
-const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts' };
-const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts' };
+const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar' };
+const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar' };
 
 function fromCloud(type, row) {
   if (type === 'expense') return { ...row, paidBy: row.paid_by, image: row.image_url };
   if (type === 'event') return { ...row, image: row.image_url };
+  if (type === 'alankar') return { ...row, image: row.image_url };
   return row;
 }
 
@@ -173,7 +179,7 @@ function toCloud(type, row) {
     copy.image_url = row.image || '';
     delete copy.paidBy;
   }
-  if (type === 'event') {
+  if (['event', 'alankar'].includes(type)) {
     copy.image_url = row.image || '';
   }
   delete copy.created_at;
@@ -219,7 +225,8 @@ const nav = [
   ['aarti.html', 'aarti', '☀', 'Aarti Timetable'],
   ['events.html', 'events', '✦', 'Events & Notices'],
   ['contacts.html', 'contacts', '☏', 'Committee Contacts'],
-  ['reports.html', 'reports', '▥', 'Reports']
+  ['reports.html', 'reports', '▥', 'Reports'],
+  ['public.html', 'public', '🌺', 'Public Portal']
 ];
 
 function renderNav() {
@@ -254,11 +261,130 @@ function shell(title, sub, body, action = '') {
 }
 
 function render() {
-  renderNav();
   pageName = detectCurrentPage();
-  let p = { dashboard, donations, expenses, aarti, events, contacts, reports }[pageName] || dashboard;
+  if (pageName === 'public') {
+    let target = document.getElementById('page');
+    if (target) target.innerHTML = publicView();
+    return;
+  }
+
+  renderNav();
+  let p = { dashboard, donations, expenses, aarti, events, contacts, reports, public: publicView }[pageName] || dashboard;
   let target = document.getElementById('page');
   if (target) target.innerHTML = p();
+}
+
+/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD (Zero Admin Capabilities) */
+function publicView() {
+  let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
+  let alankars = [...(db.alankar || [])].sort((a, b) => b.date.localeCompare(a.date));
+  let sortedDonations = [...db.donations].sort((a, b) => b.date.localeCompare(a.date));
+  let sortedExpenses = [...db.expenses].sort((a, b) => b.date.localeCompare(a.date));
+  let upcomingAartis = [...db.aartis].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  let upcomingEvents = [...db.events].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
+
+  let galleryHtml = alankars.length ? alankars.map(item => `
+    <div class="alankar-card" onclick="openBill('${item.image}')">
+      <div class="alankar-img-wrap">
+        <img src="${item.image}" alt="${escapeHtml(item.title)}">
+        <span class="alankar-date-tag">📅 ${dateLabelInMarathi(item.date)}</span>
+      </div>
+      <div class="alankar-info">
+        <strong>${escapeHtml(item.title)}</strong>
+        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}
+      </div>
+    </div>
+  `).join('') : '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो अपलोड केलेले नाहीत.</div>';
+
+  let donationRows = sortedDonations.map(d => `
+    <tr>
+      <td>${dateLabelInMarathi(d.date)}</td>
+      <td><strong>${escapeHtml(d.name)}</strong></td>
+      <td><span class="tag morning">${escapeHtml(d.mode)}</span></td>
+      <td class="amount income-t">${rupees(d.amount)}</td>
+    </tr>
+  `).join('');
+
+  let expenseRows = sortedExpenses.map(e => `
+    <tr>
+      <td>${dateLabelInMarathi(e.date)}</td>
+      <td>
+        <strong>${escapeHtml(e.description)}</strong>
+        <br><small class="muted">${escapeHtml(e.category)} • Paid by ${escapeHtml(e.paidBy)}</small>
+      </td>
+      <td class="amount expense-t">${rupees(e.amount)}</td>
+      <td>${e.image ? `<button class="text-link view-bill-btn" onclick="openBill('${e.image}')">👁 Bill</button>` : '—'}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="public-container" style="max-width:1100px; margin:0 auto; padding:16px;">
+      <!-- Public Header Banner -->
+      <div class="public-header" style="text-align:center; background:linear-gradient(135deg, #941838, #6d1028); color:#fff; padding:28px 18px; border-radius:18px; box-shadow:0 8px 25px rgba(148,24,56,0.25); margin-bottom:24px;">
+        <div style="font-size:36px; margin-bottom:4px;">॥ श्री गणेशाय नमः ॥</div>
+        <h1 style="margin:6px 0; font-size:24px; font-weight:800; color:#fff;">वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h1>
+        <p style="margin:4px 0 12px 0; opacity:0.9; font-size:13px;">६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <b>नोंदणी क्र. महा/२२०/१४</b></p>
+        <span style="background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); border-radius:30px; padding:6px 16px; font-size:12px; font-weight:600; letter-spacing:0.5px;">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
+      </div>
+
+      <!-- Section 1: Daily Bappa Alankar & Mukh Darshan Gallery -->
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन व पूजा अलंकार (Daily Darshan Gallery)</h3>
+          <span style="font-size:11px; color:#8b261e; font-weight:600;">(फोटोवर क्लिक करून पूर्ण फोटो पहा)</span>
+        </div>
+        <div class="alankar-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:12px;">
+          ${galleryHtml}
+        </div>
+      </div>
+
+      <!-- Section 2: Transparency Financial Stats -->
+      <section class="stats" style="margin-bottom:24px;">
+        <div class="stat-card income">
+          <div class="stat-head"><span>एकूण जमा (Total Collection)</span><span class="stat-icon">↗</span></div>
+          <div class="money">${rupees(inc)}</div>
+        </div>
+        <div class="stat-card expense">
+          <div class="stat-head"><span>एकूण खर्च (Total Expenses)</span><span class="stat-icon">↘</span></div>
+          <div class="money">${rupees(exp)}</div>
+        </div>
+        <div class="stat-card balance">
+          <div class="stat-head"><span>शिल्लक (Available Balance)</span><span class="stat-icon">◈</span></div>
+          <div class="money">${rupees(bal)}</div>
+        </div>
+      </section>
+
+      <!-- Section 3: Transparency Financial Ledgers -->
+      <div class="layout-split" style="margin-bottom:24px;">
+        <div class="card">
+          <div class="card-title"><h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3></div>
+          ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody>${donationRows}</tbody>`)}
+        </div>
+        <div class="card">
+          <div class="card-title"><h3>◫ खर्च नोंदी व बिलांची माहिती (Expense Ledger)</h3></div>
+          ${tableWrap(`<thead><tr><th>दिनांक</th><th>खर्च तपशील</th><th>रक्कम</th><th>बिल</th></tr></thead><tbody>${expenseRows}</tbody>`)}
+        </div>
+      </div>
+
+      <!-- Section 4: Aarti Timetable & Upcoming Events -->
+      <div class="layout-split" style="margin-bottom:24px;">
+        <div class="card">
+          <div class="card-title"><h3>🪔 आगामी आरती वेळापत्रक (Aarti Timetable)</h3></div>
+          <div class="aarti-list">
+            ${upcomingAartis.map(aartiSmall).join('')}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><h3>✦ कार्यक्रम व सूचना (Announcements)</h3></div>
+          ${upcomingEvents.map(eventSmall).join('')}
+        </div>
+      </div>
+
+      <div style="text-align:center; padding:18px; color:#6b7280; font-size:12px; border-top:1px solid #e5e7eb;">
+        🙏 <b>वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</b> परिवार | सर्व हक्क सुरक्षित 🙏
+      </div>
+    </div>
+  `;
 }
 
 /* Dashboard Page */
@@ -293,6 +419,7 @@ function dashboard() {
           <button class="quick-btn" onclick="openForm('expense')"><span>◫</span>Add Expense</button>
           <button class="quick-btn" onclick="openForm('aarti')"><span>🪔</span>Add Aarti</button>
           <button class="quick-btn highlight-quick" onclick="openPaymentQR()"><span>▣</span>Collect QR</button>
+          <button class="quick-btn" onclick="openAlankarForm()"><span>🌺</span>Add Darshan Photo</button>
           <button class="quick-btn" onclick="openAartiMessageModal()"><span>💬</span>WhatsApp Message</button>
         </div>
       </div>
@@ -694,6 +821,25 @@ function reports() {
   );
 }
 
+function openAlankarForm() {
+  modal(
+    'Upload Daily Bappa Mukh Darshan Photo',
+    `<form onsubmit="submitForm(event,'alankar','')">
+      <div class="form-grid">
+        <div class="field full"><label>Title / Decoration details</label><input name="title" required placeholder="e.g. द्वितीय दिन - पुष्प शृंगार पूजा"></div>
+        <div class="field"><label>Date</label><input name="date" type="date" value="${today}"></div>
+        <div class="field full"><label>Bappa Photo</label><input name="image" type="file" accept="image/*" required onchange="previewBillInput(this)"></div>
+        <div class="field full" id="billFormPreview"></div>
+        <div class="field full"><label>Optional note</label><textarea name="note" placeholder="e.g. आजची विशेष आरती व पुष्प सजावट"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="outline-btn" onclick="closeModal()">Cancel</button>
+        <button class="primary-btn">Upload Photo</button>
+      </div>
+    </form>`
+  );
+}
+
 /* One-Click Executive Audit Report Bundle Generator */
 function openAuditReportBundle() {
   let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
@@ -887,6 +1033,13 @@ function openForm(type, item = null) {
       <div class="field full"><label>Name</label><input name="name" required value="${escapeHtml(x.name || '')}"></div>
       <div class="field"><label>Role / designation</label><input name="role" required value="${escapeHtml(x.role || '')}"></div>
       <div class="field"><label>Phone number</label><input name="phone" required inputmode="tel" value="${escapeHtml(x.phone || '')}"></div>
+    `,
+    alankar: `
+      <div class="field full"><label>Title / Decoration details</label><input name="title" required value="${escapeHtml(x.title || '')}"></div>
+      <div class="field"><label>Date</label><input name="date" type="date" value="${x.date || today}"></div>
+      <div class="field full"><label>Bappa Photo</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+      <div class="field full" id="billFormPreview"></div>
+      <div class="field full"><label>Optional note</label><textarea name="note">${escapeHtml(x.note || '')}</textarea></div>
     `
   }[type];
 
@@ -995,7 +1148,7 @@ function editItem(type, id) {
 }
 
 function getItemList(type) {
-  return { donation: db.donations, expense: db.expenses, aarti: db.aartis, event: db.events, contact: db.contacts }[type];
+  return { donation: db.donations, expense: db.expenses, aarti: db.aartis, event: db.events, contact: db.contacts, alankar: db.alankar }[type];
 }
 
 function getItem(type, id) {
@@ -1042,11 +1195,11 @@ function openBill(image) {
     toast('No bill photo attached');
     return;
   }
-  modal('Bill Photo', `
+  modal('Photo View', `
     <div class="bill-modal-content">
-      <img class="bill-preview" src="${image}" alt="Expense bill photo">
+      <img class="bill-preview" src="${image}" alt="Photo view">
       <div class="modal-actions">
-        <a class="primary-btn" href="${image}" download="expense-bill.jpg" target="_blank">Download Photo</a>
+        <a class="primary-btn" href="${image}" download="bappa-photo.jpg" target="_blank">Download Photo</a>
       </div>
     </div>
   `);
