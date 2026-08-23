@@ -186,6 +186,17 @@ function toCloud(type, row) {
   return copy;
 }
 
+/* Helper: Sort items so newest entries ALWAYS come to top (Date DESC, then created_at / ID DESC) */
+function sortByNewest(list) {
+  return [...list].sort((a, b) => {
+    let dateCmp = (b.date || '').localeCompare(a.date || '');
+    if (dateCmp !== 0) return dateCmp;
+    let timeB = b.created_at || b.id || '';
+    let timeA = a.created_at || a.id || '';
+    return timeB.localeCompare(timeA);
+  });
+}
+
 /* Resilient Per-Table Independent Cloud Loader & Auto-Sync Polling */
 async function loadCloud() {
   if (!cloud) return;
@@ -196,10 +207,7 @@ async function loadCloud() {
     try {
       let { data, error } = await cloud.from(tableName[type]).select('*');
       if (error) {
-        if (error.code === 'PGRST205') {
-          // Table missing in Supabase schema (e.g. alankar), keep local state safely without breaking other tables
-          return;
-        }
+        if (error.code === 'PGRST205') return;
         console.warn(`Supabase ${type} fetch error:`, error.message);
         return;
       }
@@ -299,14 +307,14 @@ function render() {
   if (target) target.innerHTML = p();
 }
 
-/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD (Reordered & Limit 4 Items with Expandable Toggle) */
+/* PUBLIC DEVOTEO & TRANSPARENCY DASHBOARD */
 function publicView() {
   let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
-  let alankars = [...(db.alankar || [])].sort((a, b) => b.date.localeCompare(a.date));
-  let sortedDonations = [...db.donations].sort((a, b) => b.date.localeCompare(a.date));
-  let sortedExpenses = [...db.expenses].sort((a, b) => b.date.localeCompare(a.date));
+  let alankars = sortByNewest(db.alankar || []);
+  let sortedDonations = sortByNewest(db.donations);
+  let sortedExpenses = sortByNewest(db.expenses);
   let upcomingAartis = [...db.aartis].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  let upcomingEvents = [...db.events].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
+  let upcomingEvents = sortByNewest(db.events).slice(0, 4);
 
   let galleryHtml = alankars.length ? alankars.map(item => `
     <div class="alankar-card" onclick="openBill('${item.image}')">
@@ -454,7 +462,7 @@ function togglePublicExpenses() {
 function dashboard() {
   let inc = sum(db.donations), exp = sum(db.expenses);
   let allAartis = [...db.aartis].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  let up = db.events.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
+  let up = sortByNewest(db.events).slice(0, 3);
 
   return shell(
     'नमस्कार, वृंदावन कला क्रीडा व सांस्कृतिक मंडळ परिवार!',
@@ -632,10 +640,10 @@ function expensePie(groups) {
   </div>`;
 }
 
-/* Expenses Page */
+/* Expenses Page - Always Shows Newest Expenses at TOP */
 function expenses() {
   let cats = ['Decoration', 'Prasad', 'Sound System', 'Pooja Material', 'Electricity', 'Transport', 'Other'];
-  let list = [...db.expenses].sort((a, b) => b.date.localeCompare(a.date));
+  let list = sortByNewest(db.expenses);
   let total = sum(list);
   let groups = cats.map(c => [c, sum(list.filter(x => x.category === c))]).filter(x => x[1]);
 
@@ -702,10 +710,10 @@ function expenses() {
   );
 }
 
-/* Donations Page */
+/* Donations Page - Always Shows Newest Donations at TOP */
 function donations() {
   let total = sum(db.donations);
-  let list = [...db.donations].sort((a, b) => b.date.localeCompare(a.date));
+  let list = sortByNewest(db.donations);
 
   let rows = list.map(d => `
     <tr>
@@ -815,7 +823,7 @@ function events() {
       <button class="primary-btn" onclick="openForm('event')">+ Add Announcement</button>
     </div>
     <div class="contacts" id="eventCards">
-      ${db.events.sort((a, b) => a.date.localeCompare(b.date)).map(e => `
+      ${sortByNewest(db.events).map(e => `
         <article class="contact">
           <div class="ann-date"><b>${new Date(e.date).getDate()}</b>${new Date(e.date).toLocaleString('en', { month: 'short' }).toUpperCase()}</div>
           <div style="flex:1">
@@ -945,8 +953,8 @@ async function submitAlankarForm(ev) {
 /* One-Click Executive Audit Report Bundle Generator */
 function openAuditReportBundle() {
   let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
-  let sortedDonations = [...db.donations].sort((a, b) => a.date.localeCompare(b.date));
-  let sortedExpenses = [...db.expenses].sort((a, b) => a.date.localeCompare(b.date));
+  let sortedDonations = sortByNewest(db.donations);
+  let sortedExpenses = sortByNewest(db.expenses);
   let cats = {};
   db.expenses.forEach(e => cats[e.category] = (cats[e.category] || 0) + Number(e.amount));
 
@@ -1212,10 +1220,7 @@ async function saveItem(type, id, o) {
     }
 
     if (error) {
-      if (error.code === 'PGRST205') {
-        // Table missing in Supabase schema (e.g. alankar), saved locally
-        return;
-      }
+      if (error.code === 'PGRST205') return;
       toast('Saved locally, but cloud sync failed.');
       console.warn('Supabase Error:', error);
       return;
@@ -1502,7 +1507,7 @@ function renderAartiMessageModal() {
     `<div class="aarti-msg-modal">
       <div class="msg-type-tabs">
         <button class="tab ${currentMsgType === 'Morning' ? 'active' : ''}" onclick="switchMsgType('Morning')">🌅 Morning Aarti (९:०० AM)</button>
-        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')"><ctrl42> Evening Aarti (८:०० PM)</button>
+        <button class="tab ${currentMsgType === 'Evening' ? 'active' : ''}" onclick="switchMsgType('Evening')">🌆 Evening Aarti (८:०० PM)</button>
       </div>
       <div class="msg-date-select">
         <label>आरती दिनांक (Assigned Dates Only):</label>
