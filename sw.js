@@ -128,3 +128,19 @@ self.addEventListener('notificationclick', event => {
     })
   );
 });
+
+/* Background Delayed Notification Tester (triggers even after user minimizes/closes app) */
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SCHEDULE_TEST_NOTIFICATION') {
+    setTimeout(() => {
+      self.registration.showNotification('॥ श्री गणेशाय नमः ॥', {
+        body: '🪔 संध्याकाळची महाआरती रात्री ८:०० वाजता सुरू होत आहे. सहकुटुंब उपस्थित राहावे!',
+        icon: 'assets/icon.svg',
+        badge: 'assets/icon.svg',
+        vibrate: [200, 100, 200],
+        data: { url: './dashboard.html' }
+      });
+    }, 5000);
+  }
+});
+

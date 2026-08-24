@@ -44,6 +44,39 @@ async function requestNotificationPermission() {
   }
 }
 
+/* Interactive Background Notification Tester (Triggers after 5 seconds so user can close app) */
+function testDelayedNotification() {
+  if (!('Notification' in window)) {
+    toast('Notifications not supported on this browser.');
+    return;
+  }
+  if (Notification.permission !== 'granted') {
+    requestNotificationPermission().then(() => {
+      if (Notification.permission === 'granted') testDelayedNotification();
+    });
+    return;
+  }
+
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: 'SCHEDULE_TEST_NOTIFICATION' });
+  } else if (swRegistration) {
+    setTimeout(() => {
+      swRegistration.showNotification('॥ श्री गणेशाय नमः ॥', {
+        body: '🪔 संध्याकाळची महाआरती रात्री ८:०० वाजता सुरू होत आहे. सहकुटुंब उपस्थित राहावे!',
+        icon: 'assets/icon.svg',
+        badge: 'assets/icon.svg',
+        vibrate: [200, 100, 200]
+      });
+    }, 5000);
+  } else {
+    setTimeout(() => {
+      sendLocalNotification('॥ श्री गणेशाय नमः ॥', '🪔 संध्याकाळची महाआरती रात्री ८:०० वाजता सुरू होत आहे. सहकुटुंब उपस्थित राहावे!');
+    }, 5000);
+  }
+
+  toast('⏱️ Timer started! Minimize or close the app right now.');
+}
+
 function sendLocalNotification(title, body) {
   if (Notification.permission !== 'granted') return;
   if (swRegistration && swRegistration.showNotification) {
@@ -418,7 +451,16 @@ function documents() {
       </div>
       <button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button>
     </div>
-  ` : '';
+  ` : `
+    <div class="notif-banner" style="background:#f0fdf4; border-color:#bbf7d0;">
+      <div class="notif-text">
+        <strong style="color:#166534;">🔔 Push Notifications Active on this Device</strong>
+        <span style="color:#15803d;">Click test button, then close/minimize the app to receive alert in 5s.</span>
+      </div>
+      <button class="notif-btn" style="background:#16a34a;" onclick="testDelayedNotification()">⏱️ Test Background Alert (5s)</button>
+    </div>
+  `;
+
 
   let cards = docs.map(doc => `
     <div class="doc-card">
@@ -731,10 +773,28 @@ function dashboard() {
   let up = sortByNewest(db.events).slice(0, 3);
   let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
 
+  let notifBanner = !notifGranted ? `
+    <div class="notif-banner">
+      <div class="notif-text">
+        <strong>🔔 Enable Mandap Push Notifications</strong>
+        <span>Get instant Aarti alerts and important notices even with the app closed.</span>
+      </div>
+      <button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button>
+    </div>
+  ` : `
+    <div class="notif-banner" style="background:#f0fdf4; border-color:#bbf7d0;">
+      <div class="notif-text">
+        <strong style="color:#166534;">🔔 Push Notifications Active on this Device</strong>
+        <span style="color:#15803d;">Click test button, then close/minimize the app to receive alert in 5s.</span>
+      </div>
+      <button class="notif-btn" style="background:#16a34a;" onclick="testDelayedNotification()">⏱️ Test Background Alert (5s)</button>
+    </div>
+  `;
+
   return shell(
     'नमस्कार, वृंदावन कला क्रीडा व सांस्कृतिक मंडळ परिवार!',
     'आजची माहिती आणि झटपट कामे',
-    `${!notifGranted ? `<div class="notif-banner"><div class="notif-text"><strong>🔔 Enable Mandap Push Notifications</strong><span>Get instant Aarti alerts and important notices even with the app closed.</span></div><button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button></div>` : ''}
+    `${notifBanner}
     <section class="welcome">
       <h2>॥ श्री गणेशाय नमः ॥</h2>
       <p>सेवा, श्रद्धा आणि एकतेने आपला उत्सव सुंदर करूया.</p>
@@ -1857,7 +1917,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.onclick = () => document.querySelector('.sidebar')?.classList.toggle('open');
   let settingsBtn = document.getElementById('settingsBtn');
-  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note">Financial & Document PIN is secured via SHA-256 hashing in <b>app.js</b>. Live shared data is connected to Supabase.</p><div class="modal-actions"><button class="primary-btn" onclick="requestNotificationPermission()">🔔 Enable Notifications</button><button class="outline-btn" onclick="closeModal()">Close</button></div>`);
+  if (settingsBtn) settingsBtn.onclick = () => modal('Settings & Notifications', `<p class="pin-note">Financial & Document PIN is secured via SHA-256 hashing in <b>app.js</b>. Live shared data is connected to Supabase.</p><div class="modal-actions" style="flex-direction:column; gap:8px;"><button class="primary-btn" onclick="testDelayedNotification()">⏱️ Test Background Push Alert (5s)</button><button class="outline-btn" onclick="requestNotificationPermission()">🔔 Request Notification Permission</button><button class="outline-btn" onclick="closeModal()">Close</button></div>`);
   let modalEl = document.getElementById('modal');
   if (modalEl) modalEl.onclick = e => { if (e.target.id === 'modal') closeModal(); };
 
