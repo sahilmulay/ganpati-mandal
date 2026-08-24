@@ -451,15 +451,7 @@ function documents() {
       </div>
       <button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button>
     </div>
-  ` : `
-    <div class="notif-banner" style="background:#f0fdf4; border-color:#bbf7d0;">
-      <div class="notif-text">
-        <strong style="color:#166534;">🔔 Push Notifications Active on this Device</strong>
-        <span style="color:#15803d;">Click test button, then close/minimize the app to receive alert in 5s.</span>
-      </div>
-      <button class="notif-btn" style="background:#16a34a;" onclick="testDelayedNotification()">⏱️ Test Background Alert (5s)</button>
-    </div>
-  `;
+  ` : '';
 
 
   let cards = docs.map(doc => `
@@ -781,15 +773,7 @@ function dashboard() {
       </div>
       <button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button>
     </div>
-  ` : `
-    <div class="notif-banner" style="background:#f0fdf4; border-color:#bbf7d0;">
-      <div class="notif-text">
-        <strong style="color:#166534;">🔔 Push Notifications Active on this Device</strong>
-        <span style="color:#15803d;">Click test button, then close/minimize the app to receive alert in 5s.</span>
-      </div>
-      <button class="notif-btn" style="background:#16a34a;" onclick="testDelayedNotification()">⏱️ Test Background Alert (5s)</button>
-    </div>
-  `;
+  ` : '';
 
   return shell(
     'नमस्कार, वृंदावन कला क्रीडा व सांस्कृतिक मंडळ परिवार!',
@@ -1917,7 +1901,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.onclick = () => document.querySelector('.sidebar')?.classList.toggle('open');
   let settingsBtn = document.getElementById('settingsBtn');
-  if (settingsBtn) settingsBtn.onclick = () => modal('Settings & Notifications', `<p class="pin-note">Financial & Document PIN is secured via SHA-256 hashing in <b>app.js</b>. Live shared data is connected to Supabase.</p><div class="modal-actions" style="flex-direction:column; gap:8px;"><button class="primary-btn" onclick="testDelayedNotification()">⏱️ Test Background Push Alert (5s)</button><button class="outline-btn" onclick="requestNotificationPermission()">🔔 Request Notification Permission</button><button class="outline-btn" onclick="closeModal()">Close</button></div>`);
+  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note">Financial & Document PIN is secured via SHA-256 hashing in <b>app.js</b>. Live shared data is connected to Supabase.</p><div class="modal-actions"><button class="primary-btn" onclick="requestNotificationPermission()">🔔 Notification Settings</button><button class="outline-btn" onclick="closeModal()">Close</button></div>`);
   let modalEl = document.getElementById('modal');
   if (modalEl) modalEl.onclick = e => { if (e.target.id === 'modal') closeModal(); };
 
