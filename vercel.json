@@ -7,6 +7,7 @@
     { "source": "/events", "destination": "/events.html" },
     { "source": "/contacts", "destination": "/contacts.html" },
     { "source": "/reports", "destination": "/reports.html" },
+    { "source": "/documents", "destination": "/documents.html" },
     { "source": "/public", "destination": "/public.html" }
   ]
 }

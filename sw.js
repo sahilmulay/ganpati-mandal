@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mandal-app-v4';
+const CACHE_NAME = 'mandal-app-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   './events.html',
   './contacts.html',
   './reports.html',
+  './documents.html',
   './public.html',
   './dashboard',
   './donations',
@@ -17,6 +18,7 @@ const ASSETS = [
   './events',
   './contacts',
   './reports',
+  './documents',
   './public',
   './style.css',
   './app.js',
@@ -29,7 +31,7 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('[ServiceWorker] Pre-caching static assets');
+      console.log('[ServiceWorker] Pre-caching static assets v5');
       return cache.addAll(ASSETS.map(url => new Request(url, { cache: 'reload' }))).catch(err => {
         console.warn('[ServiceWorker] Partial cache install:', err);
       });
@@ -80,6 +82,49 @@ self.addEventListener('fetch', event => {
           }
         });
       });
+    })
+  );
+});
+
+/* Web Push Notification Listener (Shows alerts even when app/browser is closed) */
+self.addEventListener('push', event => {
+  let data = { title: '॥ वृंदावन गणेश मंडळ ॥', body: 'नवीन मंडळ सूचना उपलब्ध आहे.', icon: 'assets/icon.svg' };
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: data.icon || 'assets/icon.svg',
+    badge: 'assets/icon.svg',
+    vibrate: [200, 100, 200],
+    data: { url: data.url || './dashboard.html' }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+/* Tap on Push Notification Opens Mandal App */
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || './dashboard.html';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      for (let client of windowClients) {
+        if (client.url.includes('ganpati-mandal') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
     })
   );
 });

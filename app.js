@@ -7,15 +7,55 @@ const CLOUD_CONFIG = {
 };
 const cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
 
-/* Service Worker Registration for PWA & Full Offline Support */
+/* Service Worker Registration for PWA & Push Notifications */
+let swRegistration = null;
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').then(reg => {
-      console.log('[PWA] ServiceWorker active for offline mandap use:', reg.scope);
+      swRegistration = reg;
+      console.log('[PWA] ServiceWorker active for offline mandap & push alerts:', reg.scope);
     }).catch(err => {
       console.warn('[PWA] ServiceWorker registration skipped:', err);
     });
   });
+}
+
+/* Web Push Notification Request Handler */
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    toast('Notifications not supported on this browser.');
+    return;
+  }
+
+  try {
+    let permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      toast('🔔 Notifications enabled successfully!');
+      sendLocalNotification(
+        '॥ श्री गणेशाय नमः ॥',
+        'वृंदावन मंडळ नोटिफिकेशन्स सक्रिय झाले आहेत. आरती व महत्वाच्या सूचना मिळतील.'
+      );
+      render();
+    } else {
+      toast('Notification permission denied or dismissed.');
+    }
+  } catch (err) {
+    console.warn('Notification permission error:', err);
+  }
+}
+
+function sendLocalNotification(title, body) {
+  if (Notification.permission !== 'granted') return;
+  if (swRegistration && swRegistration.showNotification) {
+    swRegistration.showNotification(title, {
+      body: body,
+      icon: 'assets/icon.svg',
+      badge: 'assets/icon.svg',
+      vibrate: [200, 100, 200]
+    });
+  } else {
+    new Notification(title, { body: body, icon: 'assets/icon.svg' });
+  }
 }
 
 /* Fixed Receipt Alignment Coordinates */
@@ -66,7 +106,7 @@ async function hashPin(pin) {
 }
 
 /* Security Helper: Image Compression to prevent localStorage quota crash */
-function compressImage(file, maxDimension = 1000, quality = 0.75) {
+function compressImage(file, maxDimension = 1200, quality = 0.8) {
   return new Promise((resolve) => {
     if (!file || !file.type.startsWith('image/')) return resolve('');
     let reader = new FileReader();
@@ -134,11 +174,66 @@ const seed = {
   ],
   alankar: [
     { id: 'k1', title: 'प्रथम दिन - श्री गणेश स्थापना व महाआरती', date: today, image: 'assets/receipt_template.png', note: 'विशेष सुंदर पुष्प सजावट व मुख्य मुखदर्शन' }
+  ],
+  documents: [
+    {
+      id: 'doc1',
+      title: 'पोलीस ठाणे मंडप व ध्वनीक्षेप परवानगी',
+      category: 'Police Permission',
+      icon: '🚓',
+      outwardNo: 'जावक क्र. पोठा/मिरज/गणेश/२०२६/४५',
+      issuedBy: 'मिरज ग्रामीण पोलीस ठाणे',
+      validFrom: '2026-08-19',
+      validUntil: '2026-08-30',
+      status: 'Approved',
+      image: '',
+      note: 'रात्री १०:०० वाजेपर्यंत ध्वनीक्षेपक व मंडप कायदेशीर परवानगी मंजूर.'
+    },
+    {
+      id: 'doc2',
+      title: 'ग्रामपंचायत नाहरकत दाखला (NOC)',
+      category: 'Gram Panchayat NOC',
+      icon: '🏛️',
+      outwardNo: 'जा.क्र. ग्रा.पं./कवलापूर/२०२६/११२',
+      issuedBy: 'ग्रामपंचायत कवलापूर',
+      validFrom: '2026-08-15',
+      validUntil: '2026-08-31',
+      status: 'Approved',
+      image: '',
+      note: '६ रेणूका नगर, कवलापूर येथील सार्वजनिक जागेत मंडप उभारणीस नाहरकत.'
+    },
+    {
+      id: 'doc3',
+      title: 'महावितरण तात्पुरती वीज जोडणी परवानगी',
+      category: 'MSEDCL Electricity',
+      icon: '⚡',
+      outwardNo: 'MSEDCL/SANGLI/TEMP/8921',
+      issuedBy: 'महावितरण सांगली उपविभाग',
+      validFrom: '2026-08-18',
+      validUntil: '2026-08-30',
+      status: 'Approved',
+      image: '',
+      note: 'मंडप व रोषणाईसाठी तात्पुरता सिंगल फेज अधिकृत वीज पुरवठा.'
+    },
+    {
+      id: 'doc4',
+      title: 'मंडळ अधिकृत नोंदणी प्रमाणपत्र',
+      category: 'Trust Registration',
+      icon: '📜',
+      outwardNo: 'नोंदणी क्र. महा/२२०/१४',
+      issuedBy: 'सहाय्यक धर्मादाय आयुक्त, सांगली',
+      validFrom: '2014-06-12',
+      validUntil: 'कायमस्वरूपी',
+      status: 'Approved',
+      image: '',
+      note: 'वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ, कवलापूर अधिकृत नोंदणीकृत संस्था.'
+    }
   ]
 };
 
 let db = JSON.parse(localStorage.getItem('ganesh-mandal-data') || 'null') || seed;
 if (!db.alankar) db.alankar = seed.alankar;
+if (!db.documents) db.documents = seed.documents;
 db.aartis.forEach(a => a.time = a.type === 'Morning' ? '09:00' : '20:00');
 
 /* Multi-Page Route Detection */
@@ -151,6 +246,7 @@ function detectCurrentPage() {
   if (path.includes('events')) return 'events';
   if (path.includes('contacts')) return 'contacts';
   if (path.includes('reports')) return 'reports';
+  if (path.includes('documents')) return 'documents';
   return 'dashboard';
 }
 
@@ -160,13 +256,14 @@ let aartiFilter = 'all';
 let currentMsgType = 'Morning';
 let currentMsgDate = today;
 
-const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar' };
-const listName = { donation: 'donations', expense: 'expenses', aartis: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar' };
+const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
+const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 
 function fromCloud(type, row) {
   if (type === 'expense') return { ...row, paidBy: row.paid_by, image: row.image_url };
   if (type === 'event') return { ...row, image: row.image_url };
   if (type === 'alankar') return { ...row, image: row.image_url };
+  if (type === 'document') return { ...row, image: row.image_url };
   return row;
 }
 
@@ -179,7 +276,7 @@ function toCloud(type, row) {
     copy.image_url = row.image || '';
     delete copy.paidBy;
   }
-  if (['event', 'alankar'].includes(type)) {
+  if (['event', 'alankar', 'document'].includes(type)) {
     copy.image_url = row.image || '';
   }
   delete copy.created_at;
@@ -189,7 +286,7 @@ function toCloud(type, row) {
 /* Helper: Sort items so newest entries ALWAYS come to top (Date DESC, then created_at / ID DESC) */
 function sortByNewest(list) {
   return [...list].sort((a, b) => {
-    let dateCmp = (b.date || '').localeCompare(a.date || '');
+    let dateCmp = (b.date || b.validFrom || '').localeCompare(a.date || a.validFrom || '');
     if (dateCmp !== 0) return dateCmp;
     let timeB = b.created_at || b.id || '';
     let timeA = a.created_at || a.id || '';
@@ -257,6 +354,7 @@ const nav = [
   ['expenses.html', 'expenses', '💸', 'Expenses'],
   ['aarti.html', 'aarti', '☀', 'Aarti Timetable'],
   ['events.html', 'events', '✦', 'Events & Notices'],
+  ['documents.html', 'documents', '📁', 'Official Documents'],
   ['contacts.html', 'contacts', '☏', 'Committee Contacts'],
   ['reports.html', 'reports', '▥', 'Reports'],
   ['public.html', 'public', '🌺', 'Public Portal']
@@ -302,12 +400,128 @@ function render() {
   }
 
   renderNav();
-  let p = { dashboard, donations, expenses, aarti, events, contacts, reports, public: publicView }[pageName] || dashboard;
+  let p = { dashboard, donations, expenses, aarti, events, documents, contacts, reports, public: publicView }[pageName] || dashboard;
   let target = document.getElementById('page');
   if (target) target.innerHTML = p();
 }
 
-/* PUBLIC DEVOTEO & TRANSPARENCY DASHBOARD */
+/* OFFICIAL DOCUMENT STORAGE VAULT */
+function documents() {
+  let docs = db.documents || seed.documents;
+  let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
+
+  let notifBanner = !notifGranted ? `
+    <div class="notif-banner">
+      <div class="notif-text">
+        <strong>🔔 Get Mandap & Aarti Push Alerts on this Device</strong>
+        <span>Receive daily Aarti reminders and urgent announcements even when this app is closed.</span>
+      </div>
+      <button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button>
+    </div>
+  ` : '';
+
+  let cards = docs.map(doc => `
+    <div class="doc-card">
+      <div class="doc-header">
+        <div class="doc-icon">${doc.icon || '📁'}</div>
+        <div class="doc-meta">
+          <h4>${escapeHtml(doc.title)}</h4>
+          <span>${escapeHtml(doc.issuedBy || 'Official Authority')}</span>
+          <div class="outward-no">${escapeHtml(doc.outwardNo || '')}</div>
+        </div>
+      </div>
+      
+      <div class="doc-status-row">
+        <span>वैधता: <b>${escapeHtml(doc.validUntil || 'कायमस्वरूपी')}</b></span>
+        <span class="doc-status-badge ${doc.status === 'Approved' ? 'approved' : 'pending'}">● ${escapeHtml(doc.status || 'Approved')}</span>
+      </div>
+
+      ${doc.note ? `<p style="margin:0; font-size:11px; color:#5c473e; line-height:1.4;">${escapeHtml(doc.note)}</p>` : ''}
+
+      <div class="doc-actions">
+        ${doc.image ? `
+          <button class="primary-btn" onclick="openBill('${doc.image}')">👁️ View Document</button>
+          <a class="outline-btn" href="${doc.image}" download="${(doc.title || 'permission').replace(/\s+/g, '_')}.jpg" target="_blank">⬇️ Download</a>
+        ` : `
+          <button class="outline-btn" style="color:#8b261e;" onclick="guardEdit('document','${doc.id}')">📎 Upload Photo / PDF</button>
+        `}
+        <button class="table-action" onclick="guardEdit('document','${doc.id}')">•••</button>
+      </div>
+    </div>
+  `).join('');
+
+  return shell(
+    'Official Permissions & Document Vault',
+    'पोलीस ठाणे, ग्रामपंचायत, वीज वितरण व इतर कायदेशीर परवानग्या',
+    `${notifBanner}
+    <div class="card">
+      <div class="toolbar">
+        <input class="search" placeholder="Search official permissions or outward no…" oninput="filterCards(this,'docsGrid')">
+        <button class="primary-btn" onclick="openDocForm()">+ Upload New Permission</button>
+      </div>
+      <div class="docs-grid" id="docsGrid">
+        ${cards}
+      </div>
+    </div>`
+  );
+}
+
+function openDocForm(item = null) {
+  let x = item || {};
+  modal(
+    (item ? 'Edit ' : 'Upload ') + 'Official Permission / Document',
+    `<form onsubmit="submitDocForm(event,'${x.id || ''}')">
+      <div class="form-grid">
+        <div class="field full"><label>Document Title / Permission Name</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. पोलीस ठाणे मंडप परवानगी"></div>
+        <div class="field"><label>Category</label><select name="category">${['Police Permission', 'Gram Panchayat NOC', 'MSEDCL Electricity', 'Sound / Loudspeaker', 'Trust Registration', 'Fire Safety NOC', 'Other'].map(v => `<option ${x.category === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        <div class="field"><label>Outward / Ref Number (जावक क्र.)</label><input name="outwardNo" value="${escapeHtml(x.outwardNo || '')}" placeholder="e.g. जावक क्र. ४५/२०२६"></div>
+        <div class="field full"><label>Issuing Authority / Office</label><input name="issuedBy" required value="${escapeHtml(x.issuedBy || '')}" placeholder="e.g. मिरज ग्रामीण पोलीस ठाणे / ग्रामपंचायत कवलापूर"></div>
+        <div class="field"><label>Valid From</label><input name="validFrom" type="date" value="${x.validFrom || today}"></div>
+        <div class="field"><label>Valid Until / Expiry</label><input name="validUntil" value="${escapeHtml(x.validUntil || '2026-08-30')}" placeholder="e.g. 2026-08-30 किंवा कायमस्वरूपी"></div>
+        <div class="field"><label>Status</label><select name="status"><option ${x.status === 'Approved' ? 'selected' : ''}>Approved</option><option ${x.status === 'Pending' ? 'selected' : ''}>Pending</option></select></div>
+        <div class="field full"><label>Permission Document Photo / Scan</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+        <div class="field full" id="billFormPreview">
+          ${x.image ? `<div class="bill-preview-box"><img src="${x.image}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${x.image}')">👁 View Full Document</button></div>` : ''}
+        </div>
+        <div class="field full"><label>Notes / Terms</label><textarea name="note" placeholder="e.g. रात्री १०:०० वाजेपर्यंत ध्वनीक्षेपक कायदेशीर मंजुरी.">${escapeHtml(x.note || '')}</textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="outline-btn" onclick="closeModal()">Cancel</button>
+        <button class="primary-btn">Save Document</button>
+      </div>
+    </form>`
+  );
+}
+
+async function submitDocForm(ev, id) {
+  ev.preventDefault();
+  let f = new FormData(ev.target), o = Object.fromEntries(f.entries());
+  let file = f.get('image');
+  
+  if (file && file.size && file.type.startsWith('image/')) {
+    o.image = await compressImage(file, 1400, 0.82);
+  }
+
+  let list = db.documents || [];
+  let index = id ? list.findIndex(x => String(x.id) === String(id)) : -1;
+  if (index >= 0) {
+    o.id = id;
+    o.icon = list[index].icon || '📁';
+    o.image = o.image || list[index].image || '';
+    list[index] = { ...list[index], ...o };
+  } else {
+    o.id = 'doc' + (Date.now().toString().slice(-4));
+    o.icon = o.category.includes('Police') ? '🚓' : o.category.includes('Gram') ? '🏛️' : o.category.includes('Electricity') ? '⚡' : o.category.includes('Sound') ? '🔊' : '📜';
+    list.unshift(o);
+  }
+  db.documents = list;
+  save();
+  closeModal();
+  toast('Official document saved successfully!');
+  render();
+}
+
+/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD */
 function publicView() {
   let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
   let alankars = sortByNewest(db.alankar || []);
@@ -463,11 +677,13 @@ function dashboard() {
   let inc = sum(db.donations), exp = sum(db.expenses);
   let allAartis = [...db.aartis].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   let up = sortByNewest(db.events).slice(0, 3);
+  let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
 
   return shell(
     'नमस्कार, वृंदावन कला क्रीडा व सांस्कृतिक मंडळ परिवार!',
     'आजची माहिती आणि झटपट कामे',
-    `<section class="welcome">
+    `${!notifGranted ? `<div class="notif-banner"><div class="notif-text"><strong>🔔 Enable Mandap Push Notifications</strong><span>Get instant Aarti alerts and important notices even with the app closed.</span></div><button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button></div>` : ''}
+    <section class="welcome">
       <h2>॥ श्री गणेशाय नमः ॥</h2>
       <p>सेवा, श्रद्धा आणि एकतेने आपला उत्सव सुंदर करूया.</p>
     </section>
@@ -491,7 +707,7 @@ function dashboard() {
           <button class="quick-btn" onclick="openForm('aarti')"><span>🪔</span>Add Aarti</button>
           <button class="quick-btn highlight-quick" onclick="openPaymentQR()"><span>▣</span>Collect QR</button>
           <button class="quick-btn" onclick="openAlankarForm()"><span>🌺</span>Add Darshan Photo</button>
-          <button class="quick-btn" onclick="openAartiMessageModal()"><span>💬</span>WhatsApp Message</button>
+          <button class="quick-btn" onclick="go('documents.html')"><span>📁</span>Official Docs</button>
         </div>
       </div>
       <div class="card">
@@ -1091,13 +1307,13 @@ function closeModal() {
 function previewBillInput(input) {
   let file = input.files && input.files[0];
   if (!file) return;
-  compressImage(file, 1000, 0.75).then(compressedUrl => {
+  compressImage(file, 1400, 0.8).then(compressedUrl => {
     let container = document.getElementById('billFormPreview');
     if (container && compressedUrl) {
       container.innerHTML = `
         <div class="bill-preview-box">
-          <img src="${compressedUrl}" alt="Bill preview">
-          <button type="button" class="text-link" onclick="openBill('${compressedUrl}')">👁 View Full Photo</button>
+          <img src="${compressedUrl}" alt="Document preview">
+          <button type="button" class="text-link" onclick="openBill('${compressedUrl}')">👁 View Full Document</button>
         </div>
       `;
     }
@@ -1150,6 +1366,18 @@ function openForm(type, item = null) {
       <div class="field full"><label>Bappa Photo</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
       <div class="field full" id="billFormPreview"></div>
       <div class="field full"><label>Optional note</label><textarea name="note">${escapeHtml(x.note || '')}</textarea></div>
+    `,
+    document: `
+      <div class="field full"><label>Document Title</label><input name="title" required value="${escapeHtml(x.title || '')}"></div>
+      <div class="field"><label>Category</label><select name="category">${['Police Permission', 'Gram Panchayat NOC', 'MSEDCL Electricity', 'Sound / Loudspeaker', 'Trust Registration', 'Other'].map(v => `<option ${x.category === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Outward No (जावक क्र.)</label><input name="outwardNo" value="${escapeHtml(x.outwardNo || '')}"></div>
+      <div class="field full"><label>Issuing Office</label><input name="issuedBy" required value="${escapeHtml(x.issuedBy || '')}"></div>
+      <div class="field"><label>Valid Until</label><input name="validUntil" value="${escapeHtml(x.validUntil || '2026-08-30')}"></div>
+      <div class="field full"><label>Document Scan / Photo</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+      <div class="field full" id="billFormPreview">
+        ${x.image ? `<div class="bill-preview-box"><img src="${x.image}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${x.image}')">👁 View Full Document</button></div>` : ''}
+      </div>
+      <div class="field full"><label>Notes</label><textarea name="note">${escapeHtml(x.note || '')}</textarea></div>
     `
   }[type];
 
@@ -1176,7 +1404,7 @@ async function submitForm(ev, type, id) {
   
   let file = f.get('image');
   if (file && file.size && file.type.startsWith('image/')) {
-    o.image = await compressImage(file, 1000, 0.75);
+    o.image = await compressImage(file, 1200, 0.8);
     saveItem(type, id, o);
   } else {
     saveItem(type, id, o);
@@ -1240,7 +1468,7 @@ async function saveItem(type, id, o) {
 
 function guardEdit(type, id) {
   editing = { type, id };
-  modal('Financial PIN Required', `<div class="pin-art">🔐</div><p class="pin-note">Enter the shared financial PIN to edit or delete this entry.</p><form onsubmit="checkPin(event)"><div class="field"><input class="pin-input" name="pin" type="password" inputmode="numeric" maxlength="4" autofocus placeholder="••••"></div><div class="modal-actions"><button class="primary-btn">Continue</button></div></form>`);
+  modal('Financial PIN Required', `<div class="pin-art">🔐</div><p class="pin-note">Enter the shared committee PIN to edit or upload official documents.</p><form onsubmit="checkPin(event)"><div class="field"><input class="pin-input" name="pin" type="password" inputmode="numeric" maxlength="4" autofocus placeholder="••••"></div><div class="modal-actions"><button class="primary-btn">Continue</button></div></form>`);
 }
 
 async function checkPin(e) {
@@ -1250,25 +1478,30 @@ async function checkPin(e) {
   if (enteredHash === FINANCIAL_PIN_HASH) {
     let { type, id } = editing;
     closeModal();
-    manageFinancial(type, id);
+    if (type === 'document') {
+      let doc = db.documents.find(x => String(x.id) === String(id));
+      openDocForm(doc);
+    } else {
+      manageFinancial(type, id);
+    }
   } else {
     toast('Incorrect PIN. Please try again.');
   }
 }
 
 function manageFinancial(type, id) {
-  modal('Manage financial entry', `<p class="delete-text">The financial PIN has been verified. You can now edit or remove this ${type} entry.</p><div class="modal-actions"><button class="outline-btn" onclick="openForm('${type}',getItem('${type}','${id}'))">Edit</button><button class="primary-btn" onclick="confirmDelete('${type}','${id}')">Delete</button></div>`);
+  modal('Manage financial entry', `<p class="delete-text">The PIN has been verified. You can now edit or remove this ${type} entry.</p><div class="modal-actions"><button class="outline-btn" onclick="openForm('${type}',getItem('${type}','${id}'))">Edit</button><button class="primary-btn" onclick="confirmDelete('${type}','${id}')">Delete</button></div>`);
 }
 
 function editItem(type, id) {
   let list = getItemList(type);
   let x = list.find(i => String(i.id) === String(id));
-  if (type === 'donation' || type === 'expense') return manageFinancial(type, id);
+  if (['donation', 'expense', 'document'].includes(type)) return guardEdit(type, id);
   modal('Manage entry', `<p class="delete-text">Edit or remove this ${type} entry.</p><div class="modal-actions"><button class="outline-btn" onclick="openForm('${type}',getItem('${type}','${id}'))">Edit</button><button class="primary-btn" onclick="confirmDelete('${type}','${id}')">Delete</button></div>`);
 }
 
 function getItemList(type) {
-  return { donation: db.donations, expense: db.expenses, aarti: db.aartis, event: db.events, contact: db.contacts, alankar: db.alankar }[type];
+  return { donation: db.donations, expense: db.expenses, aarti: db.aartis, event: db.events, contact: db.contacts, alankar: db.alankar, document: db.documents }[type];
 }
 
 function getItem(type, id) {
@@ -1312,14 +1545,14 @@ function openPaymentQR() {
 
 function openBill(image) {
   if (!image) {
-    toast('No bill photo attached');
+    toast('No document/photo attached yet');
     return;
   }
-  modal('Photo View', `
+  modal('Document / Photo View', `
     <div class="bill-modal-content">
-      <img class="bill-preview" src="${image}" alt="Photo view">
+      <img class="bill-preview" src="${image}" alt="Document view">
       <div class="modal-actions">
-        <a class="primary-btn" href="${image}" download="bappa-photo.jpg" target="_blank">Download Photo</a>
+        <a class="primary-btn" href="${image}" download="official-mandal-doc.jpg" target="_blank">⬇️ Download Document</a>
       </div>
     </div>
   `);
@@ -1542,7 +1775,7 @@ function filterTable(i, target) {
 
 function filterCards(i, target) {
   let q = i.value.toLowerCase();
-  document.querySelectorAll('#' + target + ' .contact').forEach(r => r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none');
+  document.querySelectorAll('#' + target + ' .contact, #' + target + ' .doc-card').forEach(r => r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none');
 }
 
 function exportCSV() {
@@ -1572,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.onclick = () => document.querySelector('.sidebar')?.classList.toggle('open');
   let settingsBtn = document.getElementById('settingsBtn');
-  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note">Financial PIN is secured via SHA-256 hashing in <b>app.js</b>. Live shared data is connected to Supabase.</p><button class="outline-btn" onclick="closeModal()">Close</button>`);
+  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note">Financial & Document PIN is secured via SHA-256 hashing in <b>app.js</b>. Live shared data is connected to Supabase.</p><div class="modal-actions"><button class="primary-btn" onclick="requestNotificationPermission()">🔔 Enable Notifications</button><button class="outline-btn" onclick="closeModal()">Close</button></div>`);
   let modalEl = document.getElementById('modal');
   if (modalEl) modalEl.onclick = e => { if (e.target.id === 'modal') closeModal(); };
 
