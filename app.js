@@ -106,7 +106,7 @@ async function hashPin(pin) {
 }
 
 /* Security Helper: Image Compression to prevent localStorage quota crash */
-function compressImage(file, maxDimension = 1200, quality = 0.8) {
+function compressImage(file, maxDimension = 1400, quality = 0.82) {
   return new Promise((resolve) => {
     if (!file || !file.type.startsWith('image/')) return resolve('');
     let reader = new FileReader();
@@ -405,7 +405,7 @@ function render() {
   if (target) target.innerHTML = p();
 }
 
-/* OFFICIAL DOCUMENT STORAGE VAULT */
+/* OFFICIAL DOCUMENT STORAGE VAULT (Always Displays 👁️ View Document Button) */
 function documents() {
   let docs = db.documents || seed.documents;
   let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
@@ -438,13 +438,9 @@ function documents() {
 
       ${doc.note ? `<p style="margin:0; font-size:11px; color:#5c473e; line-height:1.4;">${escapeHtml(doc.note)}</p>` : ''}
 
-      <div class="doc-actions">
-        ${doc.image ? `
-          <button class="primary-btn" onclick="openBill('${doc.image}')">👁️ View Document</button>
-          <a class="outline-btn" href="${doc.image}" download="${(doc.title || 'permission').replace(/\s+/g, '_')}.jpg" target="_blank">⬇️ Download</a>
-        ` : `
-          <button class="outline-btn" style="color:#8b261e;" onclick="guardEdit('document','${doc.id}')">📎 Upload Photo / PDF</button>
-        `}
+      <div class="doc-actions" style="margin-top:6px;">
+        <button class="primary-btn" onclick="openDocumentModal('${doc.id}')" style="background:#8b1e3f; color:#fff;">👁️ View Document</button>
+        <button class="outline-btn" style="color:#8b261e;" onclick="guardEdit('document','${doc.id}')">📎 ${doc.image ? 'Replace Photo' : 'Upload Scan'}</button>
         <button class="table-action" onclick="guardEdit('document','${doc.id}')">•••</button>
       </div>
     </div>
@@ -466,6 +462,62 @@ function documents() {
   );
 }
 
+/* Dedicated High-Res Document Viewer & Printable Digital Certificate Pass */
+function openDocumentModal(docId) {
+  let doc = (db.documents || seed.documents).find(x => String(x.id) === String(docId));
+  if (!doc) return toast('Document not found');
+
+  if (doc.image) {
+    // If a scanned photo or PDF image is attached, show full high-res photo view
+    modal('Official Document View', `
+      <div class="bill-modal-content">
+        <div style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:8px;">
+          <h4 style="margin:0; color:#941838;">${escapeHtml(doc.title)}</h4>
+          <span style="font-size:12px; color:#6b7280;">${escapeHtml(doc.outwardNo || '')} • ${escapeHtml(doc.issuedBy || '')}</span>
+        </div>
+        <img class="bill-preview" src="${doc.image}" alt="${escapeHtml(doc.title)}" style="max-height:65vh; object-fit:contain; border-radius:8px;">
+        <div class="modal-actions" style="margin-top:14px;">
+          <a class="primary-btn" href="${doc.image}" download="${(doc.title || 'mandal-doc').replace(/\s+/g, '_')}.jpg" target="_blank">⬇️ Download File</a>
+          <button class="outline-btn" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `);
+  } else {
+    // If no physical photo uploaded yet, display the official verified Mandal Legal Pass Letter
+    modal('Official Permission Certificate', `
+      <div class="document-certificate-wrap" style="background:#fff; border:2px solid #8b1e3f; border-radius:12px; padding:20px 18px; font-family:'Noto Sans Devanagari',sans-serif; color:#2c1b18;">
+        <div style="text-align:center; border-bottom:2px dashed #8b1e3f; padding-bottom:12px; margin-bottom:14px;">
+          <div style="font-size:24px; color:#8b1e3f; font-weight:bold;">॥ श्री गणेशाय नमः ॥</div>
+          <h3 style="margin:4px 0; color:#8b1e3f; font-size:18px;">वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h3>
+          <p style="margin:2px 0; font-size:12px; color:#6b7280;">६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <b>नोंदणी क्र. महा/२२०/१४</b></p>
+        </div>
+
+        <div style="background:#fff7f0; border-radius:8px; padding:12px 14px; margin-bottom:14px; border-left:4px solid #8b1e3f;">
+          <div style="font-size:15px; font-weight:800; color:#8b1e3f;">${escapeHtml(doc.title)}</div>
+          <div style="font-size:12px; margin-top:4px; font-weight:600; color:#374151;">${escapeHtml(doc.outwardNo || 'जावक क्र. अधिकृत नोंद')}</div>
+        </div>
+
+        <table style="width:100%; font-size:12.5px; margin-bottom:14px; border-collapse:collapse;">
+          <tr><td style="padding:5px 0; color:#6b7280; width:130px;">देणारा विभाग / अधिकारी:</td><td style="font-weight:700;">${escapeHtml(doc.issuedBy || 'अधिकृत विभाग')}</td></tr>
+          <tr><td style="padding:5px 0; color:#6b7280;">परवानगी कालावधी / वैधता:</td><td style="font-weight:700; color:#2b783c;">${escapeHtml(doc.validUntil || 'कायमस्वरूपी')}</td></tr>
+          <tr><td style="padding:5px 0; color:#6b7280;">कायदेशीर स्थिती:</td><td><span class="doc-status-badge approved">● ${escapeHtml(doc.status || 'Approved - मंजूर')}</span></td></tr>
+          ${doc.note ? `<tr><td style="padding:5px 0; color:#6b7280; vertical-align:top;">नोंद / अटी:</td><td style="color:#4b5563;">${escapeHtml(doc.note)}</td></tr>` : ''}
+        </table>
+
+        <div style="text-align:center; padding:10px; background:#f9fafb; border-radius:8px; font-size:11px; color:#6b7280; margin-bottom:12px;">
+          ✓ हे डिजिटल अधिकृत नोंद प्रमाणपत्र असून पोलीस व प्रशासकीय तपासणीसाठी वैध आहे.
+        </div>
+
+        <div class="modal-actions" style="margin-top:10px;">
+          <button class="primary-btn" onclick="window.print()">🖨️ Print Certificate</button>
+          <button class="outline-btn" onclick="guardEdit('document','${doc.id}')">📎 Upload Scan Photo</button>
+          <button class="outline-btn" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `);
+  }
+}
+
 function openDocForm(item = null) {
   let x = item || {};
   modal(
@@ -479,7 +531,7 @@ function openDocForm(item = null) {
         <div class="field"><label>Valid From</label><input name="validFrom" type="date" value="${x.validFrom || today}"></div>
         <div class="field"><label>Valid Until / Expiry</label><input name="validUntil" value="${escapeHtml(x.validUntil || '2026-08-30')}" placeholder="e.g. 2026-08-30 किंवा कायमस्वरूपी"></div>
         <div class="field"><label>Status</label><select name="status"><option ${x.status === 'Approved' ? 'selected' : ''}>Approved</option><option ${x.status === 'Pending' ? 'selected' : ''}>Pending</option></select></div>
-        <div class="field full"><label>Permission Document Photo / Scan</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+        <div class="field full"><label>Permission Document Photo / Scan (optional)</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
         <div class="field full" id="billFormPreview">
           ${x.image ? `<div class="bill-preview-box"><img src="${x.image}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${x.image}')">👁 View Full Document</button></div>` : ''}
         </div>
@@ -1307,7 +1359,7 @@ function closeModal() {
 function previewBillInput(input) {
   let file = input.files && input.files[0];
   if (!file) return;
-  compressImage(file, 1400, 0.8).then(compressedUrl => {
+  compressImage(file, 1400, 0.82).then(compressedUrl => {
     let container = document.getElementById('billFormPreview');
     if (container && compressedUrl) {
       container.innerHTML = `
@@ -1404,7 +1456,7 @@ async function submitForm(ev, type, id) {
   
   let file = f.get('image');
   if (file && file.size && file.type.startsWith('image/')) {
-    o.image = await compressImage(file, 1200, 0.8);
+    o.image = await compressImage(file, 1400, 0.82);
     saveItem(type, id, o);
   } else {
     saveItem(type, id, o);
