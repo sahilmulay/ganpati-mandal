@@ -174,6 +174,16 @@ function compressImage(file, maxDimension = 1400, quality = 0.82) {
 const rupees = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 const today = new Date().toISOString().slice(0, 10);
 
+const FESTIVAL_DATES = [
+  { date: '2026-09-14', marathi: '१४ सप्टेंबर (सोमवार)', title: '१४ सप्टेंबर (सोमवार) - श्री गणेश स्थापना व प्रथम दिवस' },
+  { date: '2026-09-15', marathi: '१५ सप्टेंबर (मंगळवार)', title: '१५ सप्टेंबर (मंगळवार) - द्वितीय दिन' },
+  { date: '2026-09-16', marathi: '१६ सप्टेंबर (बुधवार)', title: '१६ सप्टेंबर (बुधवार) - तृतीय दिन' },
+  { date: '2026-09-17', marathi: '१७ सप्टेंबर (गुरुवार)', title: '१७ सप्टेंबर (गुरुवार) - चतुर्थ दिन' },
+  { date: '2026-09-18', marathi: '१८ सप्टेंबर (शुक्रवार)', title: '१८ सप्टेंबर (शुक्रवार) - पाचवा दिवस / गौरी विसर्जन' },
+  { date: '2026-09-19', marathi: '१९ सप्टेंबर (शनिवार)', title: '१९ सप्टेंबर (शनिवार) - सहावा दिवस' },
+  { date: '2026-09-20', marathi: '२० सप्टेंबर (रविवार)', title: '२० सप्टेंबर (रविवार) - अनंत चतुर्दशी / महाविसर्जन' }
+];
+
 const seed = {
   donations: [],
   expenses: [
@@ -192,7 +202,12 @@ const seed = {
   ],
   aartis: [],
   events: [],
-  contacts: [],
+  contacts: [
+    { id: 'c1', name: 'संजय जाधव', role: 'अध्यक्ष (President)', phone: '9876543210' },
+    { id: 'c2', name: 'महेश मोरे', role: 'सचिव / सेक्रेटरी (Secretary)', phone: '9876543211' },
+    { id: 'c3', name: 'अनिता पाटील', role: 'खजिनदार (Treasurer)', phone: '9876543212' },
+    { id: 'c4', name: 'ऋषिकेश जाधव', role: 'कार्यकारी सदस्य (Committee Member)', phone: '9876543213' }
+  ],
   alankar: [],
   documents: [
     {
@@ -251,7 +266,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v6';
+const DATA_VERSION = '2026-mandal-prod-v7';
 if (localStorage.getItem('mandal-data-version') !== DATA_VERSION) {
   localStorage.removeItem('ganesh-mandal-data');
   localStorage.setItem('mandal-data-version', DATA_VERSION);
@@ -264,7 +279,7 @@ if (!db.donations) db.donations = [];
 if (!db.expenses || !db.expenses.length) db.expenses = seed.expenses;
 if (!db.aartis) db.aartis = [];
 if (!db.events) db.events = [];
-if (!db.contacts) db.contacts = [];
+if (!db.contacts || !db.contacts.length) db.contacts = seed.contacts;
 db.aartis.forEach(a => a.time = a.type === 'Morning' ? '09:00' : '20:00');
 
 /* Multi-Page Route Detection */
@@ -611,8 +626,8 @@ function publicView() {
   let alankars = sortByNewest(db.alankar || []);
   let sortedDonations = sortByNewest(db.donations);
   let sortedExpenses = sortByNewest(db.expenses);
-  let upcomingAartis = [...db.aartis].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   let upcomingEvents = sortByNewest(db.events).slice(0, 4);
+  let contactsList = db.contacts && db.contacts.length ? db.contacts : seed.contacts;
 
   let galleryHtml = alankars.length ? alankars.map(item => `
     <div class="alankar-card" onclick="openBill('${item.image}')">
@@ -654,6 +669,30 @@ function publicView() {
     `;
   }).join('');
 
+  let aartiScheduleHtml = FESTIVAL_DATES.map(fd => {
+    let dayAartis = (db.aartis || []).filter(a => a.date === fd.date);
+    let morningAartis = dayAartis.filter(a => a.type === 'Morning');
+    let eveningAartis = dayAartis.filter(a => a.type === 'Evening');
+
+    return `
+      <div class="aarti-day-card">
+        <div class="aarti-day-title">
+          <span>🪔 <b>${fd.title}</b></span>
+        </div>
+        <div style="padding:8px 14px; font-size:12px;">
+          <div style="margin-bottom:6px;">
+            <span style="color:#8b261e; font-weight:700;">🌅 सकाळ (९:०० AM):</span>
+            ${morningAartis.length ? morningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध</span>'}
+          </div>
+          <div>
+            <span style="color:#8b261e; font-weight:700;">🌆 सायंकाळ (८:०० PM):</span>
+            ${eveningAartis.length ? eveningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध</span>'}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
   return `
     <div class="public-container">
       <!-- Public Header Banner -->
@@ -691,25 +730,25 @@ function publicView() {
         </div>
       </section>
 
-      <!-- Section 3: Aarti Timetable & Upcoming Events (Positioned ABOVE Expenses/Donations) -->
+      <!-- Section 3: 7-Day Aarti Timetable & Announcements -->
       <div class="layout-split" style="margin-bottom:20px;">
         <div class="card">
-          <div class="card-title"><h3>🪔 आगामी आरती वेळापत्रक (Aarti Timetable)</h3></div>
-          <div class="aarti-list">
-            ${upcomingAartis.map(aartiSmall).join('')}
+          <div class="card-title"><h3>🪔 ७ दिवसीय महाआरती वेळापत्रक (१४ ते २० सप्टेंबर २०२६)</h3></div>
+          <div style="margin-top:10px;">
+            ${aartiScheduleHtml}
           </div>
         </div>
         <div class="card">
           <div class="card-title"><h3>✦ कार्यक्रम व सूचना (Announcements)</h3></div>
-          ${upcomingEvents.map(eventSmall).join('')}
+          ${upcomingEvents.length ? upcomingEvents.map(eventSmall).join('') : '<div class="empty"><div class="empty-icon">📢</div>अद्याप कोणतीही सूचना नाही.</div>'}
         </div>
       </div>
 
-      <!-- Section 4: Transparency Financial Ledgers (Recent 4 Items + Expandable Toggle) -->
+      <!-- Section 4: Transparency Financial Ledgers -->
       <div class="layout-split" style="margin-bottom:20px;">
         <div class="card">
           <div class="card-title"><h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3></div>
-          ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody>${donationRows}</tbody>`)}
+          ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody>${donationRows || '<tr><td colspan="4" class="empty">अद्याप देणगी नोंद नाही</td></tr>'}</tbody>`)}
           ${sortedDonations.length > 4 ? `
             <div style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px dashed #e8d5c4;">
               <button id="publicDonationToggleBtn" class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="togglePublicDonations()">
@@ -728,6 +767,31 @@ function publicView() {
               </button>
             </div>
           ` : ''}
+        </div>
+      </div>
+
+      <!-- Section 5: Public Committee Contacts with Call & WhatsApp Buttons -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title">
+          <h3>👥 मंडळ कार्यकारिणी व महत्वाचे संपर्क (Committee Contacts)</h3>
+        </div>
+        <div class="public-contacts-grid">
+          ${contactsList.map(c => `
+            <div class="public-contact-card">
+              <div class="public-contact-header">
+                <div class="public-contact-avatar">${escapeHtml(c.name.split(' ').map(x => x[0]).slice(0, 2).join(''))}</div>
+                <div class="public-contact-info">
+                  <strong>${escapeHtml(c.name)}</strong>
+                  <span>${escapeHtml(c.role)}</span>
+                  <span class="contact-phone">📱 ${escapeHtml(c.phone)}</span>
+                </div>
+              </div>
+              <div class="contact-btn-group">
+                <a href="tel:${escapeHtml(c.phone)}" class="btn-call">📞 Call</a>
+                <a href="https://api.whatsapp.com/send?phone=91${(c.phone || '').replace(/\D/g, '')}&text=${encodeURIComponent('॥ श्री गणेशाय नमः ॥ नमस्कार, वृंदावन मंडळ संदर्भात संपर्क करत आहे.')}" target="_blank" class="btn-wa">💬 WhatsApp</a>
+              </div>
+            </div>
+          `).join('')}
         </div>
       </div>
 
@@ -1088,34 +1152,95 @@ function donations() {
   );
 }
 
-/* Aarti Timetable Page */
+/* Aarti Timetable Page (7 Festival Days: 14 to 20 Sept 2026) */
 function aarti() {
-  let list = [...db.aartis].filter(a => aartiFilter === 'all' || a.type === aartiFilter).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  let daysHtml = FESTIVAL_DATES.map(fd => {
+    let dayAartis = (db.aartis || []).filter(a => a.date === fd.date);
+    let morningAartis = dayAartis.filter(a => a.type === 'Morning');
+    let eveningAartis = dayAartis.filter(a => a.type === 'Evening');
+
+    if (aartiFilter === 'Morning' && !morningAartis.length) return '';
+    if (aartiFilter === 'Evening' && !eveningAartis.length) return '';
+
+    return `
+      <div class="aarti-day-card">
+        <div class="aarti-day-title">
+          <span>🪔 <b>${fd.title}</b></span>
+          <button class="text-link" style="font-size:11px; font-weight:700; color:#8b261e;" onclick="openForm('aarti', { date: '${fd.date}' })">+ Add Aarti</button>
+        </div>
+        <div style="padding:10px 14px;">
+          <!-- Morning Slot -->
+          ${(aartiFilter === 'all' || aartiFilter === 'Morning') ? `
+            <div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed #f0e2d5;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; font-weight:700; color:#8b261e;">🌅 सकाळची महाआरती (९:०० AM):</span>
+                <span class="tag morning">Morning</span>
+              </div>
+              ${morningAartis.length ? morningAartis.map(a => `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; background:#fffcf9; padding:6px 10px; border-radius:8px; border:1px solid #f7ebd9;">
+                  <div>
+                    <strong>👤 ${escapeHtml(a.person)}</strong>
+                    ${a.note ? `<br><small class="muted">${escapeHtml(a.note)}</small>` : ''}
+                  </div>
+                  <div style="display:flex; gap:6px; align-items:center;">
+                    <button class="whatsapp-btn-sm" onclick="openAartiMessageModal('${a.date}', 'Morning')">💬 WhatsApp</button>
+                    <button class="table-action" onclick="editItem('aarti','${a.id}')">•••</button>
+                  </div>
+                </div>
+              `).join('') : `
+                <div class="aarti-slot-empty">
+                  <span>अद्याप मानकरी नोंदवलेले नाहीत.</span>
+                  <button class="text-link" onclick="openForm('aarti', { date: '${fd.date}', type: 'Morning' })">+ नोंदवा</button>
+                </div>
+              `}
+            </div>
+          ` : ''}
+
+          <!-- Evening Slot -->
+          ${(aartiFilter === 'all' || aartiFilter === 'Evening') ? `
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; font-weight:700; color:#8b261e;">🌆 सायंकाळची महाआरती (८:०० PM):</span>
+                <span class="tag evening">Evening</span>
+              </div>
+              ${eveningAartis.length ? eveningAartis.map(a => `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; background:#fffcf9; padding:6px 10px; border-radius:8px; border:1px solid #f7ebd9;">
+                  <div>
+                    <strong>👤 ${escapeHtml(a.person)}</strong>
+                    ${a.note ? `<br><small class="muted">${escapeHtml(a.note)}</small>` : ''}
+                  </div>
+                  <div style="display:flex; gap:6px; align-items:center;">
+                    <button class="whatsapp-btn-sm" onclick="openAartiMessageModal('${a.date}', 'Evening')">💬 WhatsApp</button>
+                    <button class="table-action" onclick="editItem('aarti','${a.id}')">•••</button>
+                  </div>
+                </div>
+              `).join('') : `
+                <div class="aarti-slot-empty">
+                  <span>अद्याप मानकरी नोंदवलेले नाहीत.</span>
+                  <button class="text-link" onclick="openForm('aarti', { date: '${fd.date}', type: 'Evening' })">+ नोंदवा</button>
+                </div>
+              `}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).filter(Boolean).join('');
+
   return shell(
-    'Aarti Timetable',
-    'सकाळची आणि सायंकाळची आरती',
+    'Aarti Timetable (१४ ते २० सप्टेंबर २०२६)',
+    '७ दिवसीय श्री गणेश उत्सव महाआरती वेळापत्रक',
     `<div class="card">
       <div class="toolbar">
         <div class="section-tabs">
-          <button class="tab ${aartiFilter === 'all' ? 'active' : ''}" onclick="setAartiFilter('all')">All upcoming</button>
-          <button class="tab ${aartiFilter === 'Morning' ? 'active' : ''}" onclick="setAartiFilter('Morning')">Morning Aarti</button>
-          <button class="tab ${aartiFilter === 'Evening' ? 'active' : ''}" onclick="setAartiFilter('Evening')">Evening Aarti</button>
+          <button class="tab ${aartiFilter === 'all' ? 'active' : ''}" onclick="setAartiFilter('all')">All 7 Days</button>
+          <button class="tab ${aartiFilter === 'Morning' ? 'active' : ''}" onclick="setAartiFilter('Morning')">Morning (९:०० AM)</button>
+          <button class="tab ${aartiFilter === 'Evening' ? 'active' : ''}" onclick="setAartiFilter('Evening')">Evening (८:०० PM)</button>
         </div>
         <button class="primary-btn" onclick="openForm('aarti')">+ Add Aarti</button>
       </div>
-      <div class="aarti-list">
-        ${list.length ? list.map(a => `
-          <div class="aarti-row">
-            <div class="date-box"><b>${new Date(a.date + 'T12:00').getDate()}</b>${new Date(a.date + 'T12:00').toLocaleString('en', { month: 'short' })}</div>
-            <div class="aarti-info">
-              <strong>${escapeHtml(a.person)} ${a.date === today ? '<span class="tag morning">TODAY</span>' : ''}</strong>
-              <span>${time12(a.time)}${a.note ? ' • ' + escapeHtml(a.note) : ''}</span>
-            </div>
-            <span class="tag ${a.type.toLowerCase()}">${escapeHtml(a.type)}</span>
-            <button class="whatsapp-btn-sm" onclick="openAartiMessageModal('${a.date}', '${a.type}')">💬 WhatsApp</button>
-            <button class="table-action" onclick="editItem('aarti','${a.id}')">•••</button>
-          </div>
-        `).join('') : '<div class="empty"><div class="empty-icon">🪔</div>या प्रकारची आरती नोंदलेली नाही.</div>'}
+      <div style="margin-top:14px;">
+        ${daysHtml}
       </div>
     </div>`
   );
@@ -1421,7 +1546,7 @@ function openForm(type, item = null) {
       <div class="field full"><label>Donor / contributor name</label><input name="name" required value="${escapeHtml(x.name || '')}" placeholder="e.g. Patil Family"></div>
       <div class="field"><label>Amount (₹)</label><input name="amount" type="number" required value="${x.amount || ''}" placeholder="0"></div>
       <div class="field"><label>WhatsApp Number (optional)</label><input name="phone" inputmode="tel" value="${escapeHtml(x.phone || '')}" placeholder="e.g. 9876543210"></div>
-      <div class="field"><label>Date</label><input name="date" type="date" value="${x.date || today}"></div>
+      <div class="field"><label>Date (Today & Future only)</label><input name="date" type="date" min="${today}" value="${x.date || today}" required></div>
       <div class="field"><label>Payment mode</label><select name="mode">${['UPI', 'Cash', 'Bank Transfer', 'Other'].map(v => `<option ${x.mode === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="field full"><label>Optional note</label><textarea name="note" placeholder="Add a note…">${escapeHtml(x.note || '')}</textarea></div>
     `,
@@ -1437,11 +1562,19 @@ function openForm(type, item = null) {
       </div>
     `,
     aarti: `
-      <div class="field"><label>Date</label><input name="date" type="date" value="${x.date || today}"></div>
-      <div class="field"><label>Aarti type</label><select name="type"><option ${x.type === 'Morning' ? 'selected' : ''}>Morning</option><option ${x.type === 'Evening' ? 'selected' : ''}>Evening</option></select></div>
-      <div class="field"><label>Person / family</label><input name="person" required value="${escapeHtml(x.person || '')}" placeholder="e.g. Patil Family"></div>
-      <div class="field"><label>Time</label><input name="time" type="time" value="${x.time || '08:00'}"></div>
-      <div class="field full"><label>Optional custom note</label><textarea name="note">${escapeHtml(x.note || '')}</textarea></div>
+      <div class="field full"><label>मानकरी / कुटुंब नाव (Person or Family Name)</label><input name="person" required value="${escapeHtml(x.person || '')}" placeholder="उदा. पाटील परिवार / श्री. राहुल कदम"></div>
+      <div class="field"><label>आरती दिनांक (14 to 20 Sept 2026)</label>
+        <select name="date">
+          ${FESTIVAL_DATES.map(fd => `<option value="${fd.date}" ${(x.date || '2026-09-14') === fd.date ? 'selected' : ''}>${fd.title}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>आरती सत्र (Session)</label>
+        <select name="type">
+          <option value="Morning" ${x.type === 'Morning' ? 'selected' : ''}>🌅 सकाळची महाआरती (९:०० AM)</option>
+          <option value="Evening" ${x.type === 'Evening' ? 'selected' : ''}>🌆 सायंकाळची महाआरती (८:०० PM)</option>
+        </select>
+      </div>
+      <div class="field full"><label>टीप (Optional Note)</label><textarea name="note" placeholder="काही विशेष नोंद असल्यास…">${escapeHtml(x.note || '')}</textarea></div>
     `,
     event: `
       <div class="field full"><label>Title</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. Bhajan program"></div>
@@ -1521,7 +1654,12 @@ async function saveItem(type, id, o) {
   toast('Saved successfully');
 
   if (type === 'donation') {
-    setTimeout(() => openReceiptModal(o.id), 300);
+    setTimeout(() => {
+      openReceiptModal(o.id);
+      if (o.phone) {
+        setTimeout(() => sendReceiptWhatsApp(o.id), 600);
+      }
+    }, 200);
   }
 
   if (!cloud) return;
