@@ -177,18 +177,18 @@ const today = new Date().toISOString().slice(0, 10);
 const seed = {
   donations: [],
   expenses: [
-    { id: 'exp1', description: 'फ्लोटर सँड (2 गाडी)', amount: 3000, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
-    { id: 'exp2', description: '6" विट (150 नग)', amount: 2500, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
-    { id: 'exp3', description: 'सिमेंट (10 पोती)', amount: 3400, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
-    { id: 'exp4', description: 'वाळू (1 गाडी)', amount: 1000, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
-    { id: 'exp5', description: 'वाळू (30 पाटी)', amount: 1500, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-22', image: '' },
-    { id: 'exp6', description: '6" विट (150 नग)', amount: 2500, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-22', image: '' },
-    { id: 'exp7', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-23', image: '' },
-    { id: 'exp8', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-24', image: '' },
-    { id: 'exp9', description: 'सिमेंट (6 पोती)', amount: 2040, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-24', image: '' },
-    { id: 'exp10', description: 'खडी (1 गाडी)', amount: 1000, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-25', image: '' },
-    { id: 'exp11', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-25', image: '' },
-    { id: 'exp12', description: 'सिमेंट (3 पोती)', amount: 1020, category: 'Decoration', paidBy: 'मंडळ', date: '2026-08-25', image: '' }
+    { id: 'exp1', description: 'फ्लोटर सँड (2 गाडी)', amount: 3000, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
+    { id: 'exp2', description: '6" विट (150 नग)', amount: 2500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
+    { id: 'exp3', description: 'सिमेंट (10 पोती)', amount: 3400, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
+    { id: 'exp4', description: 'वाळू (1 गाडी)', amount: 1000, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: '' },
+    { id: 'exp5', description: 'वाळू (30 पाटी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-22', image: '' },
+    { id: 'exp6', description: '6" विट (150 नग)', amount: 2500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-22', image: '' },
+    { id: 'exp7', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-23', image: '' },
+    { id: 'exp8', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-24', image: '' },
+    { id: 'exp9', description: 'सिमेंट (6 पोती)', amount: 2040, category: 'Other', paidBy: 'मंडळ', date: '2026-08-24', image: '' },
+    { id: 'exp10', description: 'खडी (1 गाडी)', amount: 1000, category: 'Other', paidBy: 'मंडळ', date: '2026-08-25', image: '' },
+    { id: 'exp11', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-25', image: '' },
+    { id: 'exp12', description: 'सिमेंट (3 पोती)', amount: 1020, category: 'Other', paidBy: 'मंडळ', date: '2026-08-25', image: '' }
   ],
   aartis: [],
   events: [],
@@ -251,7 +251,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v3';
+const DATA_VERSION = '2026-mandal-prod-v4';
 if (localStorage.getItem('mandal-data-version') !== DATA_VERSION) {
   localStorage.removeItem('ganesh-mandal-data');
   localStorage.setItem('mandal-data-version', DATA_VERSION);
