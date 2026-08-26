@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mandal-app-v6';
+const CACHE_NAME = 'mandal-app-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,8 @@ const ASSETS = [
   './manifest.json',
   './assets/receipt_template.png',
   './assets/payment-qr.png',
+  './assets/mandap_bill_page1.jpg',
+  './assets/mandap_bill_page2.jpg',
   './assets/icon.svg'
 ];
 
