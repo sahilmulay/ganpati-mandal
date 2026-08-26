@@ -175,39 +175,12 @@ const rupees = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency
 const today = new Date().toISOString().slice(0, 10);
 
 const seed = {
-  donations: [
-    { id: 'd23758', name: 'Patil Family', phone: '9876543210', amount: 5100, date: today, mode: 'UPI', note: 'Ganpati Sthapana' },
-    { id: 'd23759', name: 'Ramesh Kulkarni', phone: '9876543211', amount: 2100, date: '2026-08-17', mode: 'Cash', note: '' },
-    { id: 'd23760', name: 'A-204 Joshi Family', phone: '', amount: 1100, date: '2026-08-16', mode: 'UPI', note: '' },
-    { id: 'd23761', name: 'Sharma Family', phone: '9876543213', amount: 2500, date: '2026-08-15', mode: 'Bank Transfer', note: '' }
-  ],
-  expenses: [
-    { id: 'e1', category: 'Decoration', description: 'Mandap flowers & lighting', amount: 3200, paidBy: 'S. Jadhav', date: today, image: '' },
-    { id: 'e2', category: 'Pooja Material', description: 'Pooja samagri', amount: 1850, paidBy: 'A. Patil', date: '2026-08-17', image: '' },
-    { id: 'e3', category: 'Sound System', description: 'Speaker rental advance', amount: 2500, paidBy: 'M. More', date: '2026-08-16', image: '' },
-    { id: 'e4', category: 'Prasad', description: 'Modak ingredients', amount: 900, paidBy: 'S. Jadhav', date: '2026-08-16', image: '' }
-  ],
-  aartis: [
-    { id: 'a1', date: today, type: 'Morning', person: 'Sahil Mulay', time: '09:00', note: '' },
-    { id: 'a2', date: today, type: 'Morning', person: 'Ayush Desai', time: '09:00', note: '' },
-    { id: 'a3', date: today, type: 'Evening', person: 'Kulkarni Family', time: '20:00', note: '' },
-    { id: 'a4', date: '2026-08-21', type: 'Morning', person: 'Joshi Family', time: '09:00', note: '' },
-    { id: 'a5', date: '2026-08-21', type: 'Evening', person: 'Sharma Family', time: '20:00', note: '' }
-  ],
-  events: [
-    { id: 'v1', title: 'भजन संध्या', date: '2026-08-20T20:00', description: 'सर्व भाविकांसाठी भक्तिमय भजन कार्यक्रम.', image: '' },
-    { id: 'v2', title: 'महाप्रसाद वितरण', date: '2026-08-22T13:00', description: 'दुपारी १ वाजता महाप्रसाद.', image: '' },
-    { id: 'v3', title: 'Committee Meeting', date: '2026-08-21T21:00', description: 'Visarjan route finalisation.', image: '' }
-  ],
-  contacts: [
-    { id: 'c1', name: 'Sanjay Jadhav', role: 'President', phone: '9876543210' },
-    { id: 'c2', name: 'Anita Patil', role: 'Treasurer', phone: '9876543211' },
-    { id: 'c3', name: 'Mahesh More', role: 'Secretary', phone: '9876543212' },
-    { id: 'c4', name: 'Neha Kulkarni', role: 'Event Coordinator', phone: '9876543213' }
-  ],
-  alankar: [
-    { id: 'k1', title: 'प्रथम दिन - श्री गणेश स्थापना व महाआरती', date: today, image: 'assets/receipt_template.png', note: 'विशेष सुंदर पुष्प सजावट व मुख्य मुखदर्शन' }
-  ],
+  donations: [],
+  expenses: [],
+  aartis: [],
+  events: [],
+  contacts: [],
+  alankar: [],
   documents: [
     {
       id: 'doc1',
@@ -264,9 +237,21 @@ const seed = {
   ]
 };
 
+// Automatic one-time client reset for fresh production festival records
+const DATA_VERSION = '2026-mandal-prod-v2';
+if (localStorage.getItem('mandal-data-version') !== DATA_VERSION) {
+  localStorage.removeItem('ganesh-mandal-data');
+  localStorage.setItem('mandal-data-version', DATA_VERSION);
+}
+
 let db = JSON.parse(localStorage.getItem('ganesh-mandal-data') || 'null') || seed;
 if (!db.alankar) db.alankar = seed.alankar;
 if (!db.documents) db.documents = seed.documents;
+if (!db.donations) db.donations = [];
+if (!db.expenses) db.expenses = [];
+if (!db.aartis) db.aartis = [];
+if (!db.events) db.events = [];
+if (!db.contacts) db.contacts = [];
 db.aartis.forEach(a => a.time = a.type === 'Morning' ? '09:00' : '20:00');
 
 /* Multi-Page Route Detection */
