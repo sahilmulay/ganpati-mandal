@@ -669,13 +669,14 @@ function publicView() {
     `;
   }).join('');
 
-  let aartiScheduleHtml = FESTIVAL_DATES.map(fd => {
+  let aartiScheduleHtml = FESTIVAL_DATES.map((fd, index) => {
+    let isExtra = index >= 2;
     let dayAartis = (db.aartis || []).filter(a => a.date === fd.date);
     let morningAartis = dayAartis.filter(a => a.type === 'Morning');
     let eveningAartis = dayAartis.filter(a => a.type === 'Evening');
 
     return `
-      <div class="aarti-day-card">
+      <div class="aarti-day-card ${isExtra ? 'extra-aarti-card' : ''}" style="${isExtra ? 'display:none;' : ''}">
         <div class="aarti-day-title">
           <span>🪔 <b>${fd.title}</b></span>
         </div>
@@ -730,12 +731,17 @@ function publicView() {
         </div>
       </section>
 
-      <!-- Section 3: 7-Day Aarti Timetable & Announcements -->
+      <!-- Section 3: Aarti Timetable (2 Days Shown + View More Toggle) & Announcements -->
       <div class="layout-split" style="margin-bottom:20px;">
         <div class="card">
-          <div class="card-title"><h3>🪔 ७ दिवसीय महाआरती वेळापत्रक (१४ ते २० सप्टेंबर २०२६)</h3></div>
+          <div class="card-title"><h3>🪔 श्री गणेश महाआरती वेळापत्रक (Aarti Timetable)</h3></div>
           <div style="margin-top:10px;">
             ${aartiScheduleHtml}
+            <div style="text-align:center; margin-top:10px; padding-top:6px; border-top:1px dashed #e8d5c4;">
+              <button id="publicAartiToggleBtn" class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="togglePublicAartis()">
+                ▼ View all 7 days aarti (सर्व ७ दिवसांचे वेळापत्रक पहा)
+              </button>
+            </div>
           </div>
         </div>
         <div class="card">
@@ -800,6 +806,15 @@ function publicView() {
       </div>
     </div>
   `;
+}
+
+function togglePublicAartis() {
+  let extraCards = document.querySelectorAll('.extra-aarti-card');
+  let btn = document.getElementById('publicAartiToggleBtn');
+  if (!extraCards.length || !btn) return;
+  let isHidden = extraCards[0].style.display === 'none';
+  extraCards.forEach(r => r.style.display = isHidden ? '' : 'none');
+  btn.textContent = isHidden ? '▲ View less (कमी दाखवा)' : '▼ View all 7 days aarti (सर्व ७ दिवसांचे वेळापत्रक पहा)';
 }
 
 function togglePublicDonations() {
