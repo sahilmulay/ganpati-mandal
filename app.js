@@ -1640,12 +1640,12 @@ function openForm(type, item = null) {
 
   modal(
     (item ? 'Edit ' : 'Add ') + type.charAt(0).toUpperCase() + type.slice(1),
-    `<form onsubmit="submitForm(event,'${type}','${x.id || ''}')">
+    `<form onsubmit="submitForm(event,'${type}','${x.id || ''}')" novalidate>
       <div class="form-grid">${fields}</div>
       <div class="modal-actions">
         ${extraActions}
         <button type="button" class="outline-btn" onclick="closeModal()">Cancel</button>
-        <button class="primary-btn">Save ${item ? 'changes' : ''}</button>
+        <button type="submit" class="primary-btn">Save ${item ? 'changes' : ''}</button>
       </div>
     </form>`
   );
@@ -1654,6 +1654,30 @@ function openForm(type, item = null) {
 async function submitForm(ev, type, id) {
   ev.preventDefault();
   let f = new FormData(ev.target), o = Object.fromEntries(f.entries());
+
+  if (type === 'donation') {
+    if (!o.name || !o.name.trim()) {
+      toast('कृपया नाव प्रविष्ट करा (Please enter donor name)');
+      return;
+    }
+    if (!o.amount || Number(o.amount) <= 0) {
+      toast('कृपया देणगी रक्कम प्रविष्ट करा (Please enter valid amount)');
+      return;
+    }
+    if (!o.date) o.date = today;
+  }
+
+  if (type === 'expense') {
+    if (!o.amount || Number(o.amount) <= 0) {
+      toast('कृपया खर्च रक्कम प्रविष्ट करा (Please enter valid amount)');
+      return;
+    }
+    if (!o.description || !o.description.trim()) {
+      toast('कृपया खर्च तपशील प्रविष्ट करा (Please enter description)');
+      return;
+    }
+  }
+
   if (type === 'aarti') o.time = o.type === 'Morning' ? '09:00' : '20:00';
   if (['donation', 'expense'].includes(type)) o.amount = Number(o.amount);
   
@@ -1682,13 +1706,12 @@ async function saveItem(type, id, o) {
     list.unshift(o);
   }
   save();
-  closeModal();
   toast('Saved successfully');
 
   if (type === 'donation') {
-    setTimeout(() => {
-      openReceiptModal(o.id);
-    }, 200);
+    openReceiptModal(o.id);
+  } else {
+    closeModal();
   }
 
   if (!cloud) return;
@@ -1837,50 +1860,62 @@ function openBill(image) {
 /* Digital Pavati HTML5 Canvas Image Generator (Exact Final Coordinates) */
 function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
   return new Promise((resolve) => {
-    let img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      let canvas = document.createElement('canvas');
-      canvas.width = img.width;   // 1024
-      canvas.height = img.height; // 629
-      let ctx = canvas.getContext('2d');
+    try {
+      let img = new Image();
+      img.onload = () => {
+        try {
+          let canvas = document.createElement('canvas');
+          canvas.width = img.width || 1024;
+          canvas.height = img.height || 629;
+          let ctx = canvas.getContext('2d');
 
-      // Preserve original template colors, dimensions, and design
-      ctx.drawImage(img, 0, 0);
+          // Preserve original template colors, dimensions, and design
+          ctx.drawImage(img, 0, 0);
 
-      let dateStr = dateLabelInMarathi(d.date) || d.date || '20-08-2026';
-      let nameStr = d.name || 'Sahil Ashok Mulay';
-      let amountStr = (d.amount !== undefined ? d.amount : '890') + '/-';
-      let wordsStr = d.amount_words || (numberToMarathiWords(d.amount || 890) + ' फक्त');
+          let dateStr = dateLabelInMarathi(d.date) || d.date || '20-08-2026';
+          let nameStr = d.name || 'Sahil Ashok Mulay';
+          let amountStr = (d.amount !== undefined ? d.amount : '890') + '/-';
+          let wordsStr = d.amount_words || (numberToMarathiWords(d.amount || 890) + ' फक्त');
 
-      ctx.fillStyle = config.TEXT_COLOR || '#941838'; // Dark red/maroon ink color
-      ctx.textBaseline = 'middle';
-      ctx.imageSmoothingEnabled = true;
+          ctx.fillStyle = config.TEXT_COLOR || '#941838'; // Dark red/maroon ink color
+          ctx.textBaseline = 'middle';
+          ctx.imageSmoothingEnabled = true;
 
-      // 1. Date (दिनांक)
-      ctx.font = `bold ${config.DATE_FONT_SIZE || 22}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-      ctx.fillText(dateStr, config.DATE_X, config.DATE_Y);
+          // 1. Date (दिनांक)
+          ctx.font = `bold ${config.DATE_FONT_SIZE || 22}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+          ctx.fillText(dateStr, config.DATE_X, config.DATE_Y);
 
-      // 2. Donor Name (नाव श्री.)
-      ctx.font = `bold ${config.NAME_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-      ctx.fillText(nameStr, config.NAME_X, config.NAME_Y);
+          // 2. Donor Name (नाव श्री.)
+          ctx.font = `bold ${config.NAME_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+          ctx.fillText(nameStr, config.NAME_X, config.NAME_Y);
 
-      // 3. Donation Amount Numeric (देणगी रक्कम अंकी)
-      ctx.font = `bold ${config.AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-      ctx.fillText(amountStr, config.AMOUNT_X, config.AMOUNT_Y);
+          // 3. Donation Amount Numeric (देणगी रक्कम अंकी)
+          ctx.font = `bold ${config.AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+          ctx.fillText(amountStr, config.AMOUNT_X, config.AMOUNT_Y);
 
-      // 4. Donation Amount Words (देणगी रक्कम अक्षरी)
-      ctx.font = `bold ${config.AMOUNT_WORDS_FONT_SIZE || 20}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-      ctx.fillText(wordsStr, config.AMOUNT_WORDS_X, config.AMOUNT_WORDS_Y);
+          // 4. Donation Amount Words (देणगी रक्कम अक्षरी)
+          ctx.font = `bold ${config.AMOUNT_WORDS_FONT_SIZE || 20}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+          ctx.fillText(wordsStr, config.AMOUNT_WORDS_X, config.AMOUNT_WORDS_Y);
 
-      // 5. Bottom Amount Box (रु. Box)
-      ctx.font = `bold ${config.BOTTOM_AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-      ctx.fillText(amountStr, config.BOTTOM_AMOUNT_X, config.BOTTOM_AMOUNT_Y);
+          // 5. Bottom Amount Box (रु. Box)
+          ctx.font = `bold ${config.BOTTOM_AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+          ctx.fillText(amountStr, config.BOTTOM_AMOUNT_X, config.BOTTOM_AMOUNT_Y);
 
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => resolve('');
-    img.src = 'assets/receipt_template.png';
+          resolve(canvas.toDataURL('image/png'));
+        } catch (err) {
+          console.warn('Canvas export error:', err);
+          resolve('');
+        }
+      };
+      img.onerror = (e) => {
+        console.warn('Template image load error:', e);
+        resolve('');
+      };
+      img.src = 'assets/receipt_template.png';
+    } catch (e) {
+      console.warn('Canvas init error:', e);
+      resolve('');
+    }
   });
 }
 
@@ -1918,27 +1953,56 @@ function sendReceiptWhatsApp(id) {
   }
 }
 
-async function openReceiptModal(id) {
+function openReceiptModal(id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
+
   let text = receiptText(d);
-  let canvasDataUrl = await generateReceiptCanvas(d);
-  currentModalReceiptData = canvasDataUrl;
   let waUrl = getWhatsAppReceiptUrl(d);
 
+  // Open modal INSTANTLY so there is zero delay or failure on phone
   modal(
     'Digital Donation Receipt (पावती)',
     `<div class="receipt-modal-wrap">
-      ${canvasDataUrl ? `<div style="text-align:center; margin-bottom:12px;"><img id="receiptCanvasImg" src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);"></div>` : ''}
+      <div id="receiptCanvasContainer" style="text-align:center; margin-bottom:12px;">
+        <div style="padding:14px; background:#fff7f0; border-radius:10px; border:1px solid #f2e2d0; color:#8b261e; font-size:12px;">
+          ⏳ पावती तयार होत आहे... (Loading Receipt Image...)
+        </div>
+      </div>
       
       <div class="message-preview">${escapeHtml(text)}</div>
-      <div class="modal-actions">
-        ${canvasDataUrl ? `<a href="${canvasDataUrl}" download="pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">🖼️ Download Receipt Image</a>` : ''}
+      <div class="modal-actions" id="receiptModalActions">
         <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
         <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
       </div>
     </div>`
   );
+
+  // Asynchronously generate canvas and insert image + download button smoothly
+  generateReceiptCanvas(d).then(canvasDataUrl => {
+    currentModalReceiptData = canvasDataUrl;
+    let container = document.getElementById('receiptCanvasContainer');
+    let actions = document.getElementById('receiptModalActions');
+    if (container && canvasDataUrl) {
+      container.innerHTML = `<img id="receiptCanvasImg" src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);">`;
+      if (actions && !document.getElementById('downloadReceiptBtn')) {
+        let downloadBtn = document.createElement('a');
+        downloadBtn.id = 'downloadReceiptBtn';
+        downloadBtn.href = canvasDataUrl;
+        downloadBtn.download = `pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png`;
+        downloadBtn.className = 'outline-btn';
+        downloadBtn.style.cssText = 'text-decoration:none; display:inline-flex; align-items:center; gap:6px;';
+        downloadBtn.innerHTML = '🖼️ Download Receipt Image';
+        actions.prepend(downloadBtn);
+      }
+    } else if (container) {
+      container.style.display = 'none';
+    }
+  }).catch(e => {
+    console.warn('Canvas render error:', e);
+    let container = document.getElementById('receiptCanvasContainer');
+    if (container) container.style.display = 'none';
+  });
 }
 
 /* Grouped Aarti WhatsApp Message Generator with Filtered Assigned Dates Only */
