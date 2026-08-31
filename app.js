@@ -1875,7 +1875,7 @@ function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
           let dateStr = dateLabelInMarathi(d.date) || d.date || '20-08-2026';
           let nameStr = d.name || 'Sahil Ashok Mulay';
           let amountStr = (d.amount !== undefined ? d.amount : '890') + '/-';
-          let wordsStr = d.amount_words || (numberToMarathiWords(d.amount || 890) + ' फक्त');
+          let wordsStr = d.amount_words || numberToMarathiWords(d.amount || 890);
 
           ctx.fillStyle = config.TEXT_COLOR || '#941838'; // Dark red/maroon ink color
           ctx.textBaseline = 'middle';
@@ -1922,7 +1922,8 @@ function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
 /* WhatsApp Text Donation Receipt Generator */
 function receiptText(d) {
   let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '23758';
-  return `॥ श्री गणेशाय नमः ॥\n\n*वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ*\n\n*देणगी पावती क्र.:* ${receiptNo}\n*श्री/श्रीमती:* ${d.name}\n*रक्कम:* ${rupees(d.amount)}/-\n*अक्षरी:* ${numberToMarathiWords(d.amount)}\n*दिनांक:* ${dateLabelInMarathi(d.date)}\n\nआपल्या देणगीबद्दल मनःपूर्वक धन्यवाद!\n\n🙏 *वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ* 🙏`;
+  let dateFormatted = d.date ? d.date.split('-').reverse().join('-') : '31-08-2026';
+  return `॥ श्री गणेशाय नमः ॥\n\nवृंदावन कला, क्रीडा व सांस्कृतिक मंडळ\n\nदेणगी पावती क्र.: ${receiptNo}\nश्री/श्रीमती: ${d.name}\nरक्कम: ₹${d.amount}/-\nअक्षरी: ${numberToMarathiWords(d.amount)}\nदिनांक: ${dateFormatted}\n\nआपल्या देणगीबद्दल मनःपूर्वक धन्यवाद! 🙏\n\n📱 मंडळाचे ऑनलाईन माहिती पोर्टल उपलब्ध आहे.\n\nपोर्टलवर आपण दररोजचे गणरायाचे फोटो, आरती वेळापत्रक, कार्यक्रम, देणगी माहिती व खर्चाचा पारदर्शक हिशोब पाहू शकता.\n\n🔗 पोर्टल लिंक:\nhttps://ganpati-mandal-zeta.vercel.app/public.html\n\nसर्वांनी पोर्टलला भेट द्यावी व इतरांनाही शेअर करावे.\n\n🙏 श्री वृंदावन मंडळ 🌺`;
 }
 
 function getWhatsAppReceiptUrl(d) {
