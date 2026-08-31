@@ -1688,9 +1688,6 @@ async function saveItem(type, id, o) {
   if (type === 'donation') {
     setTimeout(() => {
       openReceiptModal(o.id);
-      if (o.phone) {
-        setTimeout(() => sendReceiptWhatsApp(o.id), 600);
-      }
     }, 200);
   }
 
@@ -1912,30 +1909,13 @@ function sendReceiptWhatsApp(id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
 
-  let text = receiptText(d);
-  let canvasDataUrl = currentModalReceiptData;
-
-  // Format phone number directly to 91XXXXXXXXXX
-  let phone = (d.phone || '').replace(/\D/g, '');
-  if (phone.length === 10) phone = '91' + phone;
-
-  let waUrl = phone 
-    ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}` 
-    : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-
-  // Automatically download receipt image so user can easily attach it in WhatsApp chat
-  if (canvasDataUrl) {
-    let a = document.createElement('a');
-    a.href = canvasDataUrl;
-    a.download = `pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    toast('Downloading receipt image & opening WhatsApp…');
+  let waUrl = getWhatsAppReceiptUrl(d);
+  let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    window.location.href = waUrl;
+  } else {
+    window.open(waUrl, '_blank');
   }
-
-  // Open WhatsApp directly to phone number synchronously (bypasses browser popup blocks)
-  window.open(waUrl, '_blank');
 }
 
 async function openReceiptModal(id) {
@@ -1944,6 +1924,7 @@ async function openReceiptModal(id) {
   let text = receiptText(d);
   let canvasDataUrl = await generateReceiptCanvas(d);
   currentModalReceiptData = canvasDataUrl;
+  let waUrl = getWhatsAppReceiptUrl(d);
 
   modal(
     'Digital Donation Receipt (पावती)',
@@ -1952,9 +1933,9 @@ async function openReceiptModal(id) {
       
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions">
-        ${canvasDataUrl ? `<a href="${canvasDataUrl}" download="pavati-${d.name.replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">🖼️ Download Receipt Image</a>` : ''}
+        ${canvasDataUrl ? `<a href="${canvasDataUrl}" download="pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png" class="outline-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">🖼️ Download Receipt Image</a>` : ''}
         <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
-        <button onclick="sendReceiptWhatsApp('${d.id}')" class="primary-btn whatsapp-action-btn" style="display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</button>
+        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
       </div>
     </div>`
   );
