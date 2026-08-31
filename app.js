@@ -171,6 +171,14 @@ function compressImage(file, maxDimension = 1400, quality = 0.82) {
   });
 }
 
+function hasValidImage(img) {
+  if (!img) return false;
+  if (typeof img !== 'string') return false;
+  let s = img.trim();
+  if (!s || s === '{}' || s === '[]' || s === 'null' || s === 'undefined' || s === '[object Object]') return false;
+  return true;
+}
+
 const rupees = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 const today = new Date().toISOString().slice(0, 10);
 
@@ -266,7 +274,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v7';
+const DATA_VERSION = '2026-mandal-prod-v8';
 if (localStorage.getItem('mandal-data-version') !== DATA_VERSION) {
   localStorage.removeItem('ganesh-mandal-data');
   localStorage.setItem('mandal-data-version', DATA_VERSION);
@@ -281,6 +289,11 @@ if (!db.aartis) db.aartis = [];
 if (!db.events) db.events = [];
 if (!db.contacts || !db.contacts.length) db.contacts = seed.contacts;
 db.aartis.forEach(a => a.time = a.type === 'Morning' ? '09:00' : '20:00');
+if (Array.isArray(db.expenses)) {
+  db.expenses.forEach(e => {
+    if (!hasValidImage(e.image)) e.image = '';
+  });
+}
 
 /* Multi-Page Route Detection */
 function detectCurrentPage() {
@@ -306,10 +319,9 @@ const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis',
 const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 
 function fromCloud(type, row) {
-  if (type === 'expense') return { ...row, paidBy: row.paid_by, image: row.image_url };
-  if (type === 'event') return { ...row, image: row.image_url };
-  if (type === 'alankar') return { ...row, image: row.image_url };
-  if (type === 'document') return { ...row, image: row.image_url };
+  let img = hasValidImage(row.image_url) ? row.image_url.trim() : '';
+  if (type === 'expense') return { ...row, paidBy: row.paid_by, image: img, image_url: img };
+  if (['event', 'alankar', 'document'].includes(type)) return { ...row, image: img, image_url: img };
   return row;
 }
 
@@ -317,13 +329,14 @@ function toCloud(type, row) {
   let copy = { ...row };
   delete copy.id;
   delete copy.image;
+  let img = hasValidImage(row.image) ? row.image.trim() : '';
   if (type === 'expense') {
     copy.paid_by = copy.paidBy;
-    copy.image_url = row.image || '';
+    copy.image_url = img;
     delete copy.paidBy;
   }
   if (['event', 'alankar', 'document'].includes(type)) {
-    copy.image_url = row.image || '';
+    copy.image_url = img;
   }
   delete copy.created_at;
   return copy;
@@ -664,7 +677,7 @@ function publicView() {
           <br><small class="muted">${escapeHtml(e.category)} • Paid by ${escapeHtml(e.paidBy)}</small>
         </td>
         <td class="amount expense-t">${rupees(e.amount)}</td>
-        <td>${e.image ? `<button class="text-link view-bill-btn" onclick="openBill('${e.image}')">👁 Bill</button>` : '—'}</td>
+        <td>${hasValidImage(e.image) ? `<button class="text-link view-bill-btn" onclick="openBill('${escapeHtml(e.image)}')">👁 Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}</td>
       </tr>
     `;
   }).join('');
@@ -1042,13 +1055,13 @@ function expenses() {
       <td>
         <div class="trans-info">
           <strong>${escapeHtml(e.description)}</strong>
-          <span>${escapeHtml(e.category)}${e.image ? ' • 📎 Bill Attached' : ''}</span>
+          <span>${escapeHtml(e.category)}${hasValidImage(e.image) ? ' • 📎 Bill Attached' : ''}</span>
         </div>
       </td>
       <td>${escapeHtml(e.paidBy)}</td>
       <td class="amount expense-t">${rupees(e.amount)}</td>
       <td>
-        ${e.image ? `<button class="text-link view-bill-btn" onclick="openBill('${e.image}')">👁 View Bill</button>` : '<span class="muted-dash">—</span>'}
+        ${hasValidImage(e.image) ? `<button class="text-link view-bill-btn" onclick="openBill('${escapeHtml(e.image)}')">👁 View Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}
       </td>
       <td><button class="table-action" onclick="guardEdit('expense','${e.id}')">•••</button></td>
     </tr>
@@ -1063,7 +1076,7 @@ function expenses() {
       </div>
       <div class="expense-card-actions">
         <b class="amount expense-t">${rupees(e.amount)}</b>
-        ${e.image ? `<button class="text-link view-bill-btn" onclick="openBill('${e.image}')">👁 View Bill</button>` : ''}
+        ${hasValidImage(e.image) ? `<button class="text-link view-bill-btn" onclick="openBill('${escapeHtml(e.image)}')">👁 View Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}
         <button class="table-action" onclick="guardEdit('expense','${e.id}')">•••</button>
       </div>
     </article>
@@ -1645,10 +1658,13 @@ async function submitForm(ev, type, id) {
   if (['donation', 'expense'].includes(type)) o.amount = Number(o.amount);
   
   let file = f.get('image');
-  if (file && file.size && file.type.startsWith('image/')) {
+  if (file && file.size && file.type && file.type.startsWith('image/')) {
     o.image = await compressImage(file, 1400, 0.82);
     saveItem(type, id, o);
   } else {
+    let list = db[listName[type]];
+    let existingItem = id && list ? list.find(x => String(x.id) === String(id)) : null;
+    o.image = (existingItem && hasValidImage(existingItem.image)) ? existingItem.image : '';
     saveItem(type, id, o);
   }
 }
@@ -1658,10 +1674,11 @@ async function saveItem(type, id, o) {
   let index = id ? list.findIndex(x => String(x.id) === String(id)) : -1;
   if (id) {
     o.id = id;
-    o.image = o.image || (list[index] && list[index].image) || '';
+    o.image = hasValidImage(o.image) ? o.image : ((list[index] && hasValidImage(list[index].image)) ? list[index].image : '');
     list[index] = o;
   } else {
     o.id = type[0] + (Date.now().toString().slice(-5));
+    o.image = hasValidImage(o.image) ? o.image : '';
     list.unshift(o);
   }
   save();
@@ -1791,15 +1808,30 @@ function openPaymentQR() {
 }
 
 function openBill(image) {
-  if (!image) {
-    toast('No document/photo attached yet');
+  if (!hasValidImage(image)) {
+    modal('Document / Photo View', `
+      <div class="bill-modal-content no-bill-view">
+        <div class="no-bill-icon">🧾</div>
+        <h4>No bill available</h4>
+        <p>या खर्चासाठी कोणतीही पावती किंवा बिल जोडलेले नाही.</p>
+        <div class="modal-actions" style="justify-content:center; margin-top:14px;">
+          <button class="outline-btn" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `);
     return;
   }
   modal('Document / Photo View', `
     <div class="bill-modal-content">
-      <img class="bill-preview" src="${image}" alt="Document view">
-      <div class="modal-actions">
-        <a class="primary-btn" href="${image}" download="official-mandal-doc.jpg" target="_blank">⬇️ Download Document</a>
+      <img class="bill-preview" src="${escapeHtml(image)}" alt="Document view" onerror="this.style.display='none'; document.getElementById('billErrorPlaceholder').style.display='block';">
+      <div id="billErrorPlaceholder" style="display:none; text-align:center; padding:24px 16px;">
+        <div style="font-size:44px; margin-bottom:10px;">🧾</div>
+        <h4 style="color:#8b261e; margin:0 0 6px 0;">No bill available</h4>
+        <p style="color:#6e584f; font-size:12px; margin:0;">बिलाचा फोटो उपलब्ध नाही किंवा लोड होऊ शकला नाही.</p>
+      </div>
+      <div class="modal-actions" style="justify-content:center; margin-top:14px;">
+        <a class="primary-btn" href="${escapeHtml(image)}" download="mandal-bill-photo.jpg" target="_blank">⬇️ Download Document</a>
+        <button class="outline-btn" onclick="closeModal()">Close</button>
       </div>
     </div>
   `);
