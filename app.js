@@ -1939,18 +1939,70 @@ function copyReceiptText(id) {
   toast('Receipt text copied!');
 }
 
-/* Synchronous Popup-Safe WhatsApp Trigger targeting donor phone number directly */
-function sendReceiptWhatsApp(id) {
+function dataURLtoBlob(dataurl) {
+  let arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+  let bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+function downloadCanvasDataUrl(dataurl, filename) {
+  if (!dataurl) return;
+  try {
+    let blob = dataURLtoBlob(dataurl);
+    let blobUrl = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch (e) {
+    let a = document.createElement('a');
+    a.href = dataurl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+
+async function handleWhatsAppReceiptClick(event, id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
 
+  // 1. Ensure canvas data URL is available and trigger download
+  let canvasDataUrl = currentModalReceiptData;
+  if (!canvasDataUrl) {
+    canvasDataUrl = await generateReceiptCanvas(d);
+    currentModalReceiptData = canvasDataUrl;
+  }
+
+  if (canvasDataUrl) {
+    let filename = `pavati-${((d && d.name) || 'donation').replace(/\s+/g, '_')}.png`;
+    downloadCanvasDataUrl(canvasDataUrl, filename);
+  }
+
+  // 2. Open WhatsApp
   let waUrl = getWhatsAppReceiptUrl(d);
   let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isMobile) {
-    window.location.href = waUrl;
+    if (event) event.preventDefault();
+    toast('पावती फोटो डाउनलोड केला! WhatsApp उघडत आहे…');
+    setTimeout(() => {
+      window.location.href = waUrl;
+    }, 300);
   } else {
-    window.open(waUrl, '_blank');
+    toast('Downloading receipt photo & opening WhatsApp…');
   }
+}
+
+/* Synchronous Popup-Safe WhatsApp Trigger targeting donor phone number directly */
+function sendReceiptWhatsApp(id) {
+  handleWhatsAppReceiptClick(null, id);
 }
 
 function openReceiptModal(id) {
@@ -1973,7 +2025,7 @@ function openReceiptModal(id) {
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions" id="receiptModalActions">
         <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
-        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
+        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" onclick="handleWhatsAppReceiptClick(event, '${d.id}')" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
       </div>
     </div>`
   );
