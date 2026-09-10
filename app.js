@@ -480,7 +480,9 @@ function documents() {
   ` : '';
 
 
-  let cards = docs.map(doc => `
+  let cards = docs.map(doc => {
+    let hasPhoto = hasValidImage(doc.image);
+    return `
     <div class="doc-card">
       <div class="doc-header">
         <div class="doc-icon">${doc.icon || '📁'}</div>
@@ -496,15 +498,19 @@ function documents() {
         <span class="doc-status-badge ${doc.status === 'Approved' ? 'approved' : 'pending'}">● ${escapeHtml(doc.status || 'Approved')}</span>
       </div>
 
+      <div style="margin: 6px 0;">
+        ${hasPhoto ? `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:6px; font-weight:600;">📎 Photo Attached</span>` : `<span class="no-bill-badge" style="font-size:11px;">No document available</span>`}
+      </div>
+
       ${doc.note ? `<p style="margin:0; font-size:11px; color:#5c473e; line-height:1.4;">${escapeHtml(doc.note)}</p>` : ''}
 
-      <div class="doc-actions" style="margin-top:6px;">
+      <div class="doc-actions" style="margin-top:8px;">
         <button class="primary-btn" onclick="openDocumentModal('${doc.id}')" style="background:#8b1e3f; color:#fff;">👁️ View Document</button>
-        <button class="outline-btn" style="color:#8b261e;" onclick="guardEdit('document','${doc.id}')">📎 ${doc.image ? 'Replace Photo' : 'Upload Scan'}</button>
-        <button class="table-action" onclick="guardEdit('document','${doc.id}')">•••</button>
+        <button class="outline-btn" style="color:#8b261e;" onclick="guardEdit('document','${doc.id}')">📎 ${hasPhoto ? 'Replace Photo' : 'Upload Scan'}</button>
+        <button class="outline-btn" style="color:#dc2626; border-color:#fca5a5; padding:6px 10px;" onclick="guardEdit('document','${doc.id}')" title="Manage / Delete">🗑️ Delete</button>
       </div>
     </div>
-  `).join('');
+  `;}).join('');
 
   return shell(
     'Official Permissions & Document Vault',
@@ -522,12 +528,12 @@ function documents() {
   );
 }
 
-/* Dedicated High-Res Document Viewer & Printable Digital Certificate Pass */
+/* Dedicated High-Res Document Viewer & Pending Status Modal */
 function openDocumentModal(docId) {
   let doc = (db.documents || seed.documents).find(x => String(x.id) === String(docId));
   if (!doc) return toast('Document not found');
 
-  if (doc.image) {
+  if (hasValidImage(doc.image)) {
     // If a scanned photo or PDF image is attached, show full high-res photo view
     modal('Official Document View', `
       <div class="bill-modal-content">
@@ -535,42 +541,34 @@ function openDocumentModal(docId) {
           <h4 style="margin:0; color:#941838;">${escapeHtml(doc.title)}</h4>
           <span style="font-size:12px; color:#6b7280;">${escapeHtml(doc.outwardNo || '')} • ${escapeHtml(doc.issuedBy || '')}</span>
         </div>
-        <img class="bill-preview" src="${doc.image}" alt="${escapeHtml(doc.title)}" style="max-height:65vh; object-fit:contain; border-radius:8px;">
-        <div class="modal-actions" style="margin-top:14px;">
+        <img class="bill-preview" src="${doc.image}" alt="${escapeHtml(doc.title)}" style="max-height:65vh; object-fit:contain; border-radius:8px; border:1px solid #e5e7eb;">
+        <div class="modal-actions" style="margin-top:14px; justify-content:center; gap:8px;">
           <a class="primary-btn" href="${doc.image}" download="${(doc.title || 'mandal-doc').replace(/\s+/g, '_')}.jpg" target="_blank">⬇️ Download File</a>
+          <button class="outline-btn" onclick="guardEdit('document','${doc.id}')">📎 Replace Photo</button>
           <button class="outline-btn" onclick="closeModal()">Close</button>
         </div>
       </div>
     `);
   } else {
-    // If no physical photo uploaded yet, display the official verified Mandal Legal Pass Letter
-    modal('Official Permission Certificate', `
-      <div class="document-certificate-wrap" style="background:#fff; border:2px solid #8b1e3f; border-radius:12px; padding:20px 18px; font-family:'Noto Sans Devanagari',sans-serif; color:#2c1b18;">
-        <div style="text-align:center; border-bottom:2px dashed #8b1e3f; padding-bottom:12px; margin-bottom:14px;">
-          <div style="font-size:24px; color:#8b1e3f; font-weight:bold;">॥ श्री गणेशाय नमः ॥</div>
-          <h3 style="margin:4px 0; color:#8b1e3f; font-size:18px;">वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h3>
-          <p style="margin:2px 0; font-size:12px; color:#6b7280;">६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <b>नोंदणी क्र. महा/२२०/१४</b></p>
+    // If no physical photo uploaded yet, display friendly pending status
+    modal('Official Permission Status', `
+      <div class="bill-modal-content no-bill-view">
+        <div class="no-bill-icon">📄</div>
+        <h4 style="color:#8b261e; margin:0 0 6px 0;">No document available</h4>
+        <p style="color:#b45309; font-weight:600; font-size:13px; margin:0 0 12px 0;">⏳ Permission Pending (परवानगी प्रलंबित)</p>
+        <p style="font-size:12px; color:#6e584f; margin:0 0 14px 0; line-height:1.5;">
+          <b>${escapeHtml(doc.title)}</b> साठी कागदपत्र किंवा परवानग्या प्रत अद्याप जोडलेली नाही.
+        </p>
+
+        <div style="background:#fff7ed; border-radius:8px; padding:10px 14px; text-align:left; font-size:12px; margin-bottom:16px; border:1px solid #fed7aa;">
+          <div style="margin-bottom:4px;"><b>विभाग / कार्यालय:</b> ${escapeHtml(doc.issuedBy || 'अधिकृत विभाग')}</div>
+          <div style="margin-bottom:4px;"><b>जावक क्र.:</b> ${escapeHtml(doc.outwardNo || 'उपलब्ध नाही')}</div>
+          <div style="margin-bottom:4px;"><b>वैधता:</b> ${escapeHtml(doc.validUntil || 'कायमस्वरूपी')}</div>
+          <div><b>स्थिती:</b> <span class="doc-status-badge ${doc.status === 'Approved' ? 'approved' : 'pending'}">● ${escapeHtml(doc.status || 'Pending')}</span></div>
         </div>
 
-        <div style="background:#fff7f0; border-radius:8px; padding:12px 14px; margin-bottom:14px; border-left:4px solid #8b1e3f;">
-          <div style="font-size:15px; font-weight:800; color:#8b1e3f;">${escapeHtml(doc.title)}</div>
-          <div style="font-size:12px; margin-top:4px; font-weight:600; color:#374151;">${escapeHtml(doc.outwardNo || 'जावक क्र. अधिकृत नोंद')}</div>
-        </div>
-
-        <table style="width:100%; font-size:12.5px; margin-bottom:14px; border-collapse:collapse;">
-          <tr><td style="padding:5px 0; color:#6b7280; width:130px;">देणारा विभाग / अधिकारी:</td><td style="font-weight:700;">${escapeHtml(doc.issuedBy || 'अधिकृत विभाग')}</td></tr>
-          <tr><td style="padding:5px 0; color:#6b7280;">परवानगी कालावधी / वैधता:</td><td style="font-weight:700; color:#2b783c;">${escapeHtml(doc.validUntil || 'कायमस्वरूपी')}</td></tr>
-          <tr><td style="padding:5px 0; color:#6b7280;">कायदेशीर स्थिती:</td><td><span class="doc-status-badge approved">● ${escapeHtml(doc.status || 'Approved - मंजूर')}</span></td></tr>
-          ${doc.note ? `<tr><td style="padding:5px 0; color:#6b7280; vertical-align:top;">नोंद / अटी:</td><td style="color:#4b5563;">${escapeHtml(doc.note)}</td></tr>` : ''}
-        </table>
-
-        <div style="text-align:center; padding:10px; background:#f9fafb; border-radius:8px; font-size:11px; color:#6b7280; margin-bottom:12px;">
-          ✓ हे डिजिटल अधिकृत नोंद प्रमाणपत्र असून पोलीस व प्रशासकीय तपासणीसाठी वैध आहे.
-        </div>
-
-        <div class="modal-actions" style="margin-top:10px;">
-          <button class="primary-btn" onclick="window.print()">🖨️ Print Certificate</button>
-          <button class="outline-btn" onclick="guardEdit('document','${doc.id}')">📎 Upload Scan Photo</button>
+        <div class="modal-actions" style="justify-content:center; gap:8px;">
+          <button class="primary-btn" onclick="guardEdit('document','${doc.id}')">📎 Upload Permission Photo</button>
           <button class="outline-btn" onclick="closeModal()">Close</button>
         </div>
       </div>
@@ -580,9 +578,10 @@ function openDocumentModal(docId) {
 
 function openDocForm(item = null) {
   let x = item || {};
+  let validImg = hasValidImage(x.image) ? x.image : '';
   modal(
     (item ? 'Edit ' : 'Upload ') + 'Official Permission / Document',
-    `<form onsubmit="submitDocForm(event,'${x.id || ''}')">
+    `<form onsubmit="submitDocForm(event,'${x.id || ''}')" novalidate>
       <div class="form-grid">
         <div class="field full"><label>Document Title / Permission Name</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. पोलीस ठाणे मंडप परवानगी"></div>
         <div class="field"><label>Category</label><select name="category">${['Police Permission', 'Gram Panchayat NOC', 'MSEDCL Electricity', 'Sound / Loudspeaker', 'Trust Registration', 'Fire Safety NOC', 'Other'].map(v => `<option ${x.category === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
@@ -591,15 +590,18 @@ function openDocForm(item = null) {
         <div class="field"><label>Valid From</label><input name="validFrom" type="date" value="${x.validFrom || today}"></div>
         <div class="field"><label>Valid Until / Expiry</label><input name="validUntil" value="${escapeHtml(x.validUntil || '2026-08-30')}" placeholder="e.g. 2026-08-30 किंवा कायमस्वरूपी"></div>
         <div class="field"><label>Status</label><select name="status"><option ${x.status === 'Approved' ? 'selected' : ''}>Approved</option><option ${x.status === 'Pending' ? 'selected' : ''}>Pending</option></select></div>
-        <div class="field full"><label>Permission Document Photo / Scan (optional)</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+        <div class="field full"><label>Permission Document Photo / Scan (Upload Image)</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
         <div class="field full" id="billFormPreview">
-          ${x.image ? `<div class="bill-preview-box"><img src="${x.image}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${x.image}')">👁 View Full Document</button></div>` : ''}
+          ${validImg ? `<div class="bill-preview-box"><img src="${validImg}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${validImg}')">👁 View Full Document</button></div>` : ''}
         </div>
         <div class="field full"><label>Notes / Terms</label><textarea name="note" placeholder="e.g. रात्री १०:०० वाजेपर्यंत ध्वनीक्षेपक कायदेशीर मंजुरी.">${escapeHtml(x.note || '')}</textarea></div>
       </div>
-      <div class="modal-actions">
-        <button type="button" class="outline-btn" onclick="closeModal()">Cancel</button>
-        <button class="primary-btn">Save Document</button>
+      <div class="modal-actions" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        ${item && item.id ? `<button type="button" class="outline-btn" style="color:#dc2626; border-color:#fca5a5;" onclick="confirmDelete('document','${x.id}')">🗑️ Delete</button>` : '<div></div>'}
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="outline-btn" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="primary-btn">Save Document</button>
+        </div>
       </div>
     </form>`
   );
@@ -608,22 +610,30 @@ function openDocForm(item = null) {
 async function submitDocForm(ev, id) {
   ev.preventDefault();
   let f = new FormData(ev.target), o = Object.fromEntries(f.entries());
-  let file = f.get('image');
-  
-  if (file && file.size && file.type.startsWith('image/')) {
-    o.image = await compressImage(file, 1400, 0.82);
+
+  if (!o.title || !o.title.trim()) {
+    toast('कृपया परवानगीचे शीर्षक प्रविष्ट करा (Please enter title)');
+    return;
   }
 
   let list = db.documents || [];
+  let existing = id ? list.find(x => String(x.id) === String(id)) : null;
+
+  let file = f.get('image');
+  if (file && file.size && file.type && file.type.startsWith('image/')) {
+    o.image = await compressImage(file, 1400, 0.82);
+  } else {
+    o.image = (existing && hasValidImage(existing.image)) ? existing.image : '';
+  }
+
   let index = id ? list.findIndex(x => String(x.id) === String(id)) : -1;
   if (index >= 0) {
     o.id = id;
     o.icon = list[index].icon || '📁';
-    o.image = o.image || list[index].image || '';
     list[index] = { ...list[index], ...o };
   } else {
     o.id = 'doc' + (Date.now().toString().slice(-4));
-    o.icon = o.category.includes('Police') ? '🚓' : o.category.includes('Gram') ? '🏛️' : o.category.includes('Electricity') ? '⚡' : o.category.includes('Sound') ? '🔊' : '📜';
+    o.icon = (o.category || '').includes('Police') ? '🚓' : (o.category || '').includes('Gram') ? '🏛️' : (o.category || '').includes('Electricity') ? '⚡' : (o.category || '').includes('Sound') ? '🔊' : '📜';
     list.unshift(o);
   }
   db.documents = list;
@@ -1763,14 +1773,25 @@ async function checkPin(e) {
     let { type, id } = editing;
     closeModal();
     if (type === 'document') {
-      let doc = db.documents.find(x => String(x.id) === String(id));
-      openDocForm(doc);
+      manageDocument(id);
     } else {
       manageFinancial(type, id);
     }
   } else {
     toast('Incorrect PIN. Please try again.');
   }
+}
+
+function manageDocument(id) {
+  let doc = (db.documents || []).find(x => String(x.id) === String(id));
+  if (!doc) return;
+  modal('Manage Official Document / Permission', `
+    <p class="delete-text">PIN verified. You can edit permission details, upload/replace photo, or delete this permission.</p>
+    <div class="modal-actions" style="justify-content:center; gap:10px;">
+      <button class="outline-btn" onclick="openDocForm(getItem('document','${id}'))">✏️ Edit Details & Photo</button>
+      <button class="primary-btn" style="background:#dc2626; border-color:#dc2626;" onclick="confirmDelete('document','${id}')">🗑️ Delete Permission</button>
+    </div>
+  `);
 }
 
 function manageFinancial(type, id) {
@@ -1798,13 +1819,15 @@ function confirmDelete(type, id) {
 
 async function deleteItem(type, id) {
   let key = listName[type];
+  if (!db[key]) db[key] = [];
   db[key] = db[key].filter(x => String(x.id) !== String(id));
   save();
   closeModal();
-  toast('Entry deleted');
+  toast('Entry deleted successfully');
+  render();
   if (cloud && String(id).includes('-')) {
     let { error } = await cloud.from(tableName[type]).delete().eq('id', id);
-    if (error) {
+    if (error && error.code !== 'PGRST205') {
       toast('Cloud delete failed.');
       console.warn(error);
     }

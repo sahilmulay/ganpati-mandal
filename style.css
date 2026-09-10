@@ -712,6 +712,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .doc-actions .primary-btn, .doc-actions .outline-btn {
