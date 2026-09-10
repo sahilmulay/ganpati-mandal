@@ -318,10 +318,42 @@ let currentMsgDate = today;
 const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 
+function formatDateTimeLocal(dateStr) {
+  if (!dateStr) {
+    let now = new Date();
+    let y = now.getFullYear();
+    let m = String(now.getMonth() + 1).padStart(2, '0');
+    let d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}T19:00`;
+  }
+  if (dateStr.length === 16 && dateStr.includes('T')) return dateStr;
+  let d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr.slice(0, 16);
+  let y = d.getFullYear();
+  let m = String(d.getMonth() + 1).padStart(2, '0');
+  let day = String(d.getDate()).padStart(2, '0');
+  let h = String(d.getHours()).padStart(2, '0');
+  let min = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${day}T${h}:${min}`;
+}
+
+function formatEventDateTimeDisplay(dateStr) {
+  if (!dateStr) return '';
+  let d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  let datePart = `${d.getDate()} ${marathiMonthName(d.getMonth() + 1)} ${d.getFullYear()}`;
+  let hours = d.getHours();
+  let mins = String(d.getMinutes()).padStart(2, '0');
+  let ampm = hours >= 12 ? 'PM' : 'AM';
+  let h12 = ((hours + 11) % 12 + 1);
+  return `${datePart} · ${h12}:${mins} ${ampm}`;
+}
+
 function fromCloud(type, row) {
   let img = hasValidImage(row.image_url) ? row.image_url.trim() : '';
   if (type === 'expense') return { ...row, paidBy: row.paid_by, image: img, image_url: img };
-  if (['event', 'alankar', 'document'].includes(type)) return { ...row, image: img, image_url: img };
+  if (type === 'event') return { ...row, date: formatDateTimeLocal(row.date), image: img, image_url: img };
+  if (['alankar', 'document'].includes(type)) return { ...row, image: img, image_url: img };
   return row;
 }
 
@@ -335,7 +367,14 @@ function toCloud(type, row) {
     copy.image_url = img;
     delete copy.paidBy;
   }
-  if (['event', 'alankar', 'document'].includes(type)) {
+  if (type === 'event') {
+    copy.image_url = img;
+    if (row.date) {
+      let d = new Date(row.date);
+      if (!isNaN(d.getTime())) copy.date = d.toISOString();
+    }
+  }
+  if (['alankar', 'document'].includes(type)) {
     copy.image_url = img;
   }
   delete copy.created_at;
@@ -937,7 +976,18 @@ function aartiSmall(a) {
 
 function eventSmall(e) {
   let d = new Date(e.date);
-  return `<div class="announcement"><div class="ann-date"><b>${d.getDate()}</b>${d.toLocaleString('en', { month: 'short' }).toUpperCase()}</div><div class="ann-copy"><strong>${escapeHtml(e.title)}</strong><p>${escapeHtml(e.description)}</p></div></div>`;
+  let dayNum = isNaN(d.getDate()) ? '📢' : d.getDate();
+  let monthStr = isNaN(d.getTime()) ? 'EVENT' : d.toLocaleString('en', { month: 'short' }).toUpperCase();
+  return `
+    <div class="announcement">
+      <div class="ann-date"><b>${dayNum}</b>${monthStr}</div>
+      <div class="ann-copy">
+        <strong>${escapeHtml(e.title)}</strong>
+        <span style="font-size:11px; color:#8b261e; font-weight:600; display:block; margin-bottom:2px;">${formatEventDateTimeDisplay(e.date)}</span>
+        <p>${escapeHtml(e.description || '')}</p>
+      </div>
+    </div>
+  `;
 }
 
 function tableWrap(h) {
@@ -1288,21 +1338,33 @@ function setAartiFilter(filter) { aartiFilter = filter; render(); }
 
 /* Events Page */
 function events() {
+  let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
+  let notifBanner = !notifGranted ? `
+    <div class="notif-banner" style="margin-bottom:14px;">
+      <div class="notif-text">
+        <strong>🔔 Enable Mandap & Event Push Notifications</strong>
+        <span>Receive instant notifications when new events or urgent announcements are posted.</span>
+      </div>
+      <button class="notif-btn" onclick="requestNotificationPermission()">Enable Notifications</button>
+    </div>
+  ` : '';
+
   return shell(
     'Events & Announcements',
     'मंडळाच्या कार्यक्रमांची माहिती',
-    `<div class="toolbar">
+    `${notifBanner}
+    <div class="toolbar">
       <input class="search" placeholder="Search notices…" oninput="filterCards(this,'eventCards')">
       <button class="primary-btn" onclick="openForm('event')">+ Add Announcement</button>
     </div>
     <div class="contacts" id="eventCards">
       ${sortByNewest(db.events).map(e => `
         <article class="contact">
-          <div class="ann-date"><b>${new Date(e.date).getDate()}</b>${new Date(e.date).toLocaleString('en', { month: 'short' }).toUpperCase()}</div>
+          <div class="ann-date"><b>${new Date(e.date).getDate() || '📢'}</b>${new Date(e.date).toLocaleString('en', { month: 'short' }).toUpperCase()}</div>
           <div style="flex:1">
-            <strong>${escapeHtml(e.title)}</strong>
-            <span>${new Date(e.date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-            <span>${escapeHtml(e.description)}</span>
+            <strong style="font-size:14px; color:#2c1b18;">${escapeHtml(e.title)}</strong>
+            <span style="color:#8b261e; font-weight:600; font-size:11.5px; margin:2px 0;">📅 ${formatEventDateTimeDisplay(e.date)}</span>
+            ${e.description ? `<p style="margin:4px 0 0 0; font-size:12px; color:#5c473e; line-height:1.45;">${escapeHtml(e.description)}</p>` : ''}
           </div>
           <button class="table-action" onclick="editItem('event','${e.id}')">•••</button>
         </article>
@@ -1615,9 +1677,9 @@ function openForm(type, item = null) {
       <div class="field full"><label>टीप (Optional Note)</label><textarea name="note" placeholder="काही विशेष नोंद असल्यास…">${escapeHtml(x.note || '')}</textarea></div>
     `,
     event: `
-      <div class="field full"><label>Title</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. Bhajan program"></div>
-      <div class="field full"><label>Date & time</label><input name="date" type="datetime-local" value="${x.date || today + 'T19:00'}"></div>
-      <div class="field full"><label>Description</label><textarea name="description" required>${escapeHtml(x.description || '')}</textarea></div>
+      <div class="field full"><label>Title / Announcement Name</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. भजन संध्या किंवा महाप्रसाद"></div>
+      <div class="field full"><label>Date & Time (तारीख व वेळ)</label><input name="date" type="datetime-local" required value="${formatDateTimeLocal(x.date)}"></div>
+      <div class="field full"><label>Description / Details</label><textarea name="description" placeholder="कार्यक्रमाची संपूर्ण माहिती…">${escapeHtml(x.description || '')}</textarea></div>
       <div class="field full"><label>Event image (optional)</label><input name="image" type="file" accept="image/*"></div>
     `,
     contact: `
@@ -1722,6 +1784,18 @@ async function saveItem(type, id, o) {
     openReceiptModal(o.id);
   } else {
     closeModal();
+  }
+
+  if (type === 'event') {
+    let notifTitle = '📢 नवीन सूचना: ' + (o.title || 'कार्यक्रम');
+    let notifBody = (o.description ? o.description + ' • ' : '') + formatEventDateTimeDisplay(o.date);
+    if (('Notification' in window) && Notification.permission === 'granted') {
+      sendLocalNotification(notifTitle, notifBody);
+    } else if (('Notification' in window) && Notification.permission !== 'denied') {
+      Notification.requestPermission().then(p => {
+        if (p === 'granted') sendLocalNotification(notifTitle, notifBody);
+      });
+    }
   }
 
   if (!cloud) return;
@@ -1995,6 +2069,8 @@ function downloadCanvasDataUrl(dataurl, filename) {
 }
 
 async function handleWhatsAppReceiptClick(event, id) {
+  if (event) event.preventDefault();
+
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
 
@@ -2010,17 +2086,19 @@ async function handleWhatsAppReceiptClick(event, id) {
     downloadCanvasDataUrl(canvasDataUrl, filename);
   }
 
-  // 2. Open WhatsApp
+  // 2. Open WhatsApp targeting donor phone number
   let waUrl = getWhatsAppReceiptUrl(d);
   let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isMobile) {
-    if (event) event.preventDefault();
     toast('पावती फोटो डाउनलोड केला! WhatsApp उघडत आहे…');
     setTimeout(() => {
       window.location.href = waUrl;
-    }, 300);
+    }, 350);
   } else {
-    toast('Downloading receipt photo & opening WhatsApp…');
+    toast('पावती फोटो डाउनलोड केला व WhatsApp उघडत आहे…');
+    setTimeout(() => {
+      window.open(waUrl, '_blank');
+    }, 150);
   }
 }
 
