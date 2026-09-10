@@ -422,6 +422,19 @@ function sortByNewest(list) {
   });
 }
 
+/* Helper: Sort upcoming events in chronological order (earliest date first, e.g. 14th Sept first, then 20th Sept) */
+function sortEventsChronological(list) {
+  return [...list].sort((a, b) => {
+    let dateA = a.date || '';
+    let dateB = b.date || '';
+    let dateCmp = dateA.localeCompare(dateB);
+    if (dateCmp !== 0) return dateCmp;
+    let timeA = a.created_at || a.id || '';
+    let timeB = b.created_at || b.id || '';
+    return timeA.localeCompare(timeB);
+  });
+}
+
 /* Resilient Per-Table Independent Cloud Loader & Auto-Sync Polling */
 async function loadCloud() {
   if (!cloud) return;
@@ -718,7 +731,7 @@ function publicView() {
   let alankars = sortByNewest(db.alankar || []);
   let sortedDonations = sortByNewest(db.donations);
   let sortedExpenses = sortByNewest(db.expenses);
-  let upcomingEvents = sortByNewest(db.events).slice(0, 4);
+  let upcomingEvents = sortEventsChronological(db.events).slice(0, 6);
   let contactsList = db.contacts && db.contacts.length ? db.contacts : seed.contacts;
 
   let galleryHtml = alankars.length ? alankars.map(item => `
@@ -931,7 +944,7 @@ function togglePublicExpenses() {
 function dashboard() {
   let inc = sum(db.donations), exp = sum(db.expenses);
   let allAartis = [...db.aartis].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  let up = sortByNewest(db.events).slice(0, 3);
+  let up = sortEventsChronological(db.events).slice(0, 4);
   let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
 
   let notifBanner = !notifGranted ? `
@@ -1388,7 +1401,7 @@ function events() {
       <button class="primary-btn" onclick="openForm('event')">+ Add Announcement</button>
     </div>
     <div class="contacts" id="eventCards">
-      ${sortByNewest(db.events).map(e => `
+      ${sortEventsChronological(db.events).map(e => `
         <article class="contact">
           <div class="ann-date"><b>${new Date(e.date).getDate() || '📢'}</b>${new Date(e.date).toLocaleString('en', { month: 'short' }).toUpperCase()}</div>
           <div style="flex:1">
