@@ -318,6 +318,36 @@ let currentMsgDate = today;
 const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 
+const preloadedReceiptImg = new Image();
+preloadedReceiptImg.src = 'assets/receipt_template.png';
+
+function formatPhoneWithCountryCode(phone) {
+  if (!phone) return '';
+  let digits = String(phone).replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) {
+    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }
+  if (digits.length === 12 && digits.startsWith('91')) {
+    let num = digits.slice(2);
+    return `+91 ${num.slice(0, 5)} ${num.slice(5)}`;
+  }
+  if (digits.startsWith('91') && digits.length > 10) {
+    return `+91 ${digits.slice(2)}`;
+  }
+  return `+91 ${digits}`;
+}
+
+function getCleanWhatsAppDigits(phone) {
+  if (!phone) return '';
+  let digits = String(phone).replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) return '91' + digits;
+  if (digits.length === 12 && digits.startsWith('91')) return digits;
+  if (digits.startsWith('91')) return digits;
+  return '91' + digits;
+}
+
 function formatDateTimeLocal(dateStr) {
   if (!dateStr) {
     let now = new Date();
@@ -1645,7 +1675,7 @@ function openForm(type, item = null) {
     donation: `
       <div class="field full"><label>Donor / contributor name</label><input name="name" required value="${escapeHtml(x.name || '')}" placeholder="e.g. Patil Family"></div>
       <div class="field"><label>Amount (₹)</label><input name="amount" type="number" required value="${x.amount || ''}" placeholder="0"></div>
-      <div class="field"><label>WhatsApp Number (optional)</label><input name="phone" inputmode="tel" value="${escapeHtml(x.phone || '')}" placeholder="e.g. 9876543210"></div>
+      <div class="field"><label>WhatsApp Number (optional)</label><input name="phone" inputmode="tel" value="${formatPhoneWithCountryCode(x.phone || '')}" placeholder="+91 98765 43210" oninput="if(this.value.replace(/\D/g,'').length===10){this.value=formatPhoneWithCountryCode(this.value)}" onblur="this.value = formatPhoneWithCountryCode(this.value)"></div>
       <div class="field"><label>Date (Today & Future only)</label><input name="date" type="date" min="${today}" value="${x.date || today}" required></div>
       <div class="field"><label>Payment mode</label><select name="mode">${['UPI', 'Cash', 'Bank Transfer', 'Other'].map(v => `<option ${x.mode === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="field full"><label>Optional note</label><textarea name="note" placeholder="Add a note…">${escapeHtml(x.note || '')}</textarea></div>
@@ -1685,7 +1715,7 @@ function openForm(type, item = null) {
     contact: `
       <div class="field full"><label>Name</label><input name="name" required value="${escapeHtml(x.name || '')}"></div>
       <div class="field"><label>Role / designation</label><input name="role" required value="${escapeHtml(x.role || '')}"></div>
-      <div class="field"><label>Phone number</label><input name="phone" required inputmode="tel" value="${escapeHtml(x.phone || '')}"></div>
+      <div class="field"><label>Phone number</label><input name="phone" required inputmode="tel" value="${formatPhoneWithCountryCode(x.phone || '')}" placeholder="+91 98765 43210" oninput="if(this.value.replace(/\D/g,'').length===10){this.value=formatPhoneWithCountryCode(this.value)}" onblur="this.value = formatPhoneWithCountryCode(this.value)"></div>
     `,
     alankar: `
       <div class="field full"><label>Title / Decoration details</label><input name="title" required value="${escapeHtml(x.title || '')}"></div>
@@ -1726,6 +1756,10 @@ function openForm(type, item = null) {
 async function submitForm(ev, type, id) {
   ev.preventDefault();
   let f = new FormData(ev.target), o = Object.fromEntries(f.entries());
+
+  if (o.phone) {
+    o.phone = formatPhoneWithCountryCode(o.phone);
+  }
 
   if (type === 'donation') {
     if (!o.name || !o.name.trim()) {
@@ -1957,61 +1991,59 @@ function openBill(image) {
 /* Digital Pavati HTML5 Canvas Image Generator (Exact Final Coordinates) */
 function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
   return new Promise((resolve) => {
-    try {
-      let img = new Image();
-      img.onload = () => {
-        try {
-          let canvas = document.createElement('canvas');
-          canvas.width = img.width || 1024;
-          canvas.height = img.height || 629;
-          let ctx = canvas.getContext('2d');
+    function draw(img) {
+      try {
+        let canvas = document.createElement('canvas');
+        canvas.width = img.width || 1024;
+        canvas.height = img.height || 629;
+        let ctx = canvas.getContext('2d');
 
-          // Preserve original template colors, dimensions, and design
-          ctx.drawImage(img, 0, 0);
+        // Preserve original template colors, dimensions, and design
+        ctx.drawImage(img, 0, 0);
 
-          let dateStr = dateLabelInMarathi(d.date) || d.date || '20-08-2026';
-          let nameStr = d.name || 'Sahil Ashok Mulay';
-          let amountStr = (d.amount !== undefined ? d.amount : '890') + '/-';
-          let wordsStr = d.amount_words || numberToMarathiWords(d.amount || 890);
+        let dateStr = dateLabelInMarathi(d.date) || d.date || '20-08-2026';
+        let nameStr = d.name || 'Donor';
+        let amountStr = (d.amount !== undefined ? d.amount : '0') + '/-';
+        let wordsStr = d.amount_words || numberToMarathiWords(d.amount || 0);
 
-          ctx.fillStyle = config.TEXT_COLOR || '#941838'; // Dark red/maroon ink color
-          ctx.textBaseline = 'middle';
-          ctx.imageSmoothingEnabled = true;
+        ctx.fillStyle = config.TEXT_COLOR || '#941838'; // Dark red/maroon ink color
+        ctx.textBaseline = 'middle';
+        ctx.imageSmoothingEnabled = true;
 
-          // 1. Date (दिनांक)
-          ctx.font = `bold ${config.DATE_FONT_SIZE || 22}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-          ctx.fillText(dateStr, config.DATE_X, config.DATE_Y);
+        // 1. Date (दिनांक)
+        ctx.font = `bold ${config.DATE_FONT_SIZE || 22}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+        ctx.fillText(dateStr, config.DATE_X, config.DATE_Y);
 
-          // 2. Donor Name (नाव श्री.)
-          ctx.font = `bold ${config.NAME_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-          ctx.fillText(nameStr, config.NAME_X, config.NAME_Y);
+        // 2. Donor Name (नाव श्री.)
+        ctx.font = `bold ${config.NAME_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+        ctx.fillText(nameStr, config.NAME_X, config.NAME_Y);
 
-          // 3. Donation Amount Numeric (देणगी रक्कम अंकी)
-          ctx.font = `bold ${config.AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-          ctx.fillText(amountStr, config.AMOUNT_X, config.AMOUNT_Y);
+        // 3. Donation Amount Numeric (देणगी रक्कम अंकी)
+        ctx.font = `bold ${config.AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+        ctx.fillText(amountStr, config.AMOUNT_X, config.AMOUNT_Y);
 
-          // 4. Donation Amount Words (देणगी रक्कम अक्षरी)
-          ctx.font = `bold ${config.AMOUNT_WORDS_FONT_SIZE || 20}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-          ctx.fillText(wordsStr, config.AMOUNT_WORDS_X, config.AMOUNT_WORDS_Y);
+        // 4. Donation Amount Words (देणगी रक्कम अक्षरी)
+        ctx.font = `bold ${config.AMOUNT_WORDS_FONT_SIZE || 20}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+        ctx.fillText(wordsStr, config.AMOUNT_WORDS_X, config.AMOUNT_WORDS_Y);
 
-          // 5. Bottom Amount Box (रु. Box)
-          ctx.font = `bold ${config.BOTTOM_AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
-          ctx.fillText(amountStr, config.BOTTOM_AMOUNT_X, config.BOTTOM_AMOUNT_Y);
+        // 5. Bottom Amount Box (रु. Box)
+        ctx.font = `bold ${config.BOTTOM_AMOUNT_FONT_SIZE || 24}px ${config.FONT_FAMILY || '"Noto Sans Devanagari", sans-serif'}`;
+        ctx.fillText(amountStr, config.BOTTOM_AMOUNT_X, config.BOTTOM_AMOUNT_Y);
 
-          resolve(canvas.toDataURL('image/png'));
-        } catch (err) {
-          console.warn('Canvas export error:', err);
-          resolve('');
-        }
-      };
-      img.onerror = (e) => {
-        console.warn('Template image load error:', e);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (err) {
+        console.warn('Canvas export error:', err);
         resolve('');
-      };
-      img.src = 'assets/receipt_template.png';
-    } catch (e) {
-      console.warn('Canvas init error:', e);
-      resolve('');
+      }
+    }
+
+    if (preloadedReceiptImg.complete && preloadedReceiptImg.naturalWidth > 0) {
+      draw(preloadedReceiptImg);
+    } else {
+      let fallback = new Image();
+      fallback.onload = () => draw(fallback);
+      fallback.onerror = () => resolve('');
+      fallback.src = 'assets/receipt_template.png';
     }
   });
 }
@@ -2024,10 +2056,9 @@ function receiptText(d) {
 }
 
 function getWhatsAppReceiptUrl(d) {
-  let phone = (d.phone || '').replace(/\D/g, '');
-  if (phone.length === 10) phone = '91' + phone;
+  let phoneDigits = getCleanWhatsAppDigits(d.phone);
   let text = encodeURIComponent(receiptText(d));
-  return phone ? `https://api.whatsapp.com/send?phone=${phone}&text=${text}` : `https://api.whatsapp.com/send?text=${text}`;
+  return phoneDigits ? `https://api.whatsapp.com/send?phone=${phoneDigits}&text=${text}` : `https://api.whatsapp.com/send?text=${text}`;
 }
 
 function copyReceiptText(id) {
@@ -2068,95 +2099,76 @@ function downloadCanvasDataUrl(dataurl, filename) {
   }
 }
 
-async function handleWhatsAppReceiptClick(event, id) {
+function downloadReceiptImageDirect(id) {
+  let d = db.donations.find(x => String(x.id) === String(id));
+  let canvasDataUrl = currentModalReceiptData;
+  if (!canvasDataUrl) return;
+  let filename = `pavati-${((d && d.name) || 'donation').replace(/\s+/g, '_')}.png`;
+  downloadCanvasDataUrl(canvasDataUrl, filename);
+  toast('पावती फोटो डाउनलोड केला!');
+}
+
+function handleWhatsAppReceiptClick(event, id) {
   if (event) event.preventDefault();
 
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
 
-  // 1. Ensure canvas data URL is available and trigger download
+  // 1. Immediately trigger download synchronously in click stack
   let canvasDataUrl = currentModalReceiptData;
-  if (!canvasDataUrl) {
-    canvasDataUrl = await generateReceiptCanvas(d);
-    currentModalReceiptData = canvasDataUrl;
-  }
+  let filename = `pavati-${((d && d.name) || 'donation').replace(/\s+/g, '_')}.png`;
 
   if (canvasDataUrl) {
-    let filename = `pavati-${((d && d.name) || 'donation').replace(/\s+/g, '_')}.png`;
     downloadCanvasDataUrl(canvasDataUrl, filename);
+  } else {
+    generateReceiptCanvas(d).then(url => {
+      if (url) downloadCanvasDataUrl(url, filename);
+    });
   }
 
-  // 2. Open WhatsApp targeting donor phone number
+  // 2. Open WhatsApp immediately in direct click stack (bypasses popup blockers)
   let waUrl = getWhatsAppReceiptUrl(d);
   let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   if (isMobile) {
     toast('पावती फोटो डाउनलोड केला! WhatsApp उघडत आहे…');
     setTimeout(() => {
       window.location.href = waUrl;
-    }, 350);
+    }, 250);
   } else {
     toast('पावती फोटो डाउनलोड केला व WhatsApp उघडत आहे…');
-    setTimeout(() => {
-      window.open(waUrl, '_blank');
-    }, 150);
+    window.open(waUrl, '_blank');
   }
 }
 
-/* Synchronous Popup-Safe WhatsApp Trigger targeting donor phone number directly */
 function sendReceiptWhatsApp(id) {
   handleWhatsAppReceiptClick(null, id);
 }
 
-function openReceiptModal(id) {
+async function openReceiptModal(id) {
   let d = db.donations.find(x => String(x.id) === String(id));
   if (!d) return;
 
   let text = receiptText(d);
   let waUrl = getWhatsAppReceiptUrl(d);
 
-  // Open modal INSTANTLY so there is zero delay or failure on phone
+  // Generate canvas (instant since template is preloaded in memory)
+  let canvasDataUrl = await generateReceiptCanvas(d);
+  currentModalReceiptData = canvasDataUrl;
+
   modal(
     'Digital Donation Receipt (पावती)',
     `<div class="receipt-modal-wrap">
-      <div id="receiptCanvasContainer" style="text-align:center; margin-bottom:12px;">
-        <div style="padding:14px; background:#fff7f0; border-radius:10px; border:1px solid #f2e2d0; color:#8b261e; font-size:12px;">
-          ⏳ पावती तयार होत आहे... (Loading Receipt Image...)
-        </div>
-      </div>
+      ${canvasDataUrl ? `<div style="text-align:center; margin-bottom:12px;"><img id="receiptCanvasImg" src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);"></div>` : ''}
       
       <div class="message-preview">${escapeHtml(text)}</div>
       <div class="modal-actions" id="receiptModalActions">
-        <button class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
-        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" onclick="handleWhatsAppReceiptClick(event, '${d.id}')" class="primary-btn whatsapp-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</a>
+        ${canvasDataUrl ? `<button type="button" class="outline-btn" onclick="downloadReceiptImageDirect('${d.id}')" style="display:inline-flex; align-items:center; gap:6px;">🖼️ Download Receipt Image</button>` : ''}
+        <button type="button" class="outline-btn" onclick="copyReceiptText('${d.id}')">📋 Copy Text</button>
+        <button type="button" onclick="handleWhatsAppReceiptClick(event, '${d.id}')" class="primary-btn whatsapp-action-btn" style="display:inline-flex; align-items:center; justify-content:center; gap:6px;">💬 Send on WhatsApp</button>
       </div>
     </div>`
   );
-
-  // Asynchronously generate canvas and insert image + download button smoothly
-  generateReceiptCanvas(d).then(canvasDataUrl => {
-    currentModalReceiptData = canvasDataUrl;
-    let container = document.getElementById('receiptCanvasContainer');
-    let actions = document.getElementById('receiptModalActions');
-    if (container && canvasDataUrl) {
-      container.innerHTML = `<img id="receiptCanvasImg" src="${canvasDataUrl}" alt="Digital Pavati" style="max-width:100%; border-radius:10px; border:1px solid #e0cdbc; box-shadow:0 4px 15px rgba(0,0,0,0.08);">`;
-      if (actions && !document.getElementById('downloadReceiptBtn')) {
-        let downloadBtn = document.createElement('a');
-        downloadBtn.id = 'downloadReceiptBtn';
-        downloadBtn.href = canvasDataUrl;
-        downloadBtn.download = `pavati-${(d.name || 'donation').replace(/\s+/g, '_')}.png`;
-        downloadBtn.className = 'outline-btn';
-        downloadBtn.style.cssText = 'text-decoration:none; display:inline-flex; align-items:center; gap:6px;';
-        downloadBtn.innerHTML = '🖼️ Download Receipt Image';
-        actions.prepend(downloadBtn);
-      }
-    } else if (container) {
-      container.style.display = 'none';
-    }
-  }).catch(e => {
-    console.warn('Canvas render error:', e);
-    let container = document.getElementById('receiptCanvasContainer');
-    if (container) container.style.display = 'none';
-  });
 }
 
 /* Grouped Aarti WhatsApp Message Generator with Filtered Assigned Dates Only */
