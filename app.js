@@ -182,33 +182,38 @@ async function hashPin(pin) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/* Security Helper: Image Compression to prevent localStorage quota crash */
-function compressImage(file, maxDimension = 1400, quality = 0.82) {
+/* Security Helper: Image Compression with Safe Fallback for Any Format */
+function compressImage(file, maxDimension = 1200, quality = 0.78) {
   return new Promise((resolve) => {
-    if (!file || !file.type.startsWith('image/')) return resolve('');
+    if (!file) return resolve('');
     let reader = new FileReader();
     reader.onload = e => {
+      let rawData = e.target.result;
       let img = new Image();
       img.onload = () => {
-        let canvas = document.createElement('canvas');
-        let w = img.width, h = img.height;
-        if (w > maxDimension || h > maxDimension) {
-          if (w > h) {
-            h = Math.round((h * maxDimension) / w);
-            w = maxDimension;
-          } else {
-            w = Math.round((w * maxDimension) / h);
-            h = maxDimension;
+        try {
+          let canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxDimension || h > maxDimension) {
+            if (w > h) {
+              h = Math.round((h * maxDimension) / w);
+              w = maxDimension;
+            } else {
+              w = Math.round((w * maxDimension) / h);
+              h = maxDimension;
+            }
           }
+          canvas.width = w;
+          canvas.height = h;
+          let ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (err) {
+          resolve(rawData);
         }
-        canvas.width = w;
-        canvas.height = h;
-        let ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
       };
-      img.onerror = () => resolve('');
-      img.src = e.target.result;
+      img.onerror = () => resolve(rawData); // Fallback to raw data url for non-standard formats
+      img.src = rawData;
     };
     reader.onerror = () => resolve('');
     reader.readAsDataURL(file);
@@ -267,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v12';
+const DATA_VERSION = '2026-mandal-prod-v13';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -379,10 +384,19 @@ function formatEventDateTimeDisplay(dateStr) {
 }
 
 function fromCloud(type, row) {
-  let img = hasValidImage(row.image_url) ? row.image_url.trim() : '';
+  let img = hasValidImage(row.image) ? row.image.trim() : (hasValidImage(row.image_url) ? row.image_url.trim() : '');
   if (type === 'expense') return { ...row, paidBy: row.paid_by, image: img, image_url: img };
   if (type === 'event') return { ...row, date: formatDateTimeLocal(row.date), image: img, image_url: img };
-  if (['alankar', 'document'].includes(type)) return { ...row, image: img, image_url: img };
+  if (type === 'document') return {
+    ...row,
+    outwardNo: row.outward_no || row.outwardNo || '',
+    issuedBy: row.issued_by || row.issuedBy || '',
+    validFrom: row.valid_from || row.validFrom || '',
+    validUntil: row.valid_until || row.validUntil || '',
+    image: img,
+    image_url: img
+  };
+  if (type === 'alankar') return { ...row, image: img, image_url: img };
   return row;
 }
 
@@ -390,20 +404,35 @@ function toCloud(type, row) {
   let copy = { ...row };
   delete copy.id;
   delete copy.image;
-  let img = hasValidImage(row.image) ? row.image.trim() : '';
+  let img = hasValidImage(row.image) ? row.image.trim() : (hasValidImage(row.image_url) ? row.image_url.trim() : '');
   if (type === 'expense') {
     copy.paid_by = copy.paidBy;
+    copy.image = img;
     copy.image_url = img;
     delete copy.paidBy;
   }
   if (type === 'event') {
+    copy.image = img;
     copy.image_url = img;
     if (row.date) {
       let d = new Date(row.date);
       if (!isNaN(d.getTime())) copy.date = d.toISOString();
     }
   }
-  if (['alankar', 'document'].includes(type)) {
+  if (type === 'document') {
+    copy.outward_no = row.outwardNo || row.outward_no || '';
+    copy.issued_by = row.issuedBy || row.issued_by || '';
+    copy.valid_from = row.validFrom || row.valid_from || '';
+    copy.valid_until = row.validUntil || row.valid_until || '';
+    copy.image = img;
+    copy.image_url = img;
+    delete copy.outwardNo;
+    delete copy.issuedBy;
+    delete copy.validFrom;
+    delete copy.validUntil;
+  }
+  if (type === 'alankar') {
+    copy.image = img;
     copy.image_url = img;
   }
   delete copy.created_at;
@@ -477,8 +506,12 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function save() {
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
-  window.dispatchEvent(new Event('storage'));
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
+    window.dispatchEvent(new Event('storage'));
+  } catch (err) {
+    console.warn('localStorage quota note:', err);
+  }
 }
 
 window.addEventListener('storage', () => {
@@ -572,9 +605,9 @@ function render() {
   if (target) target.innerHTML = p();
 }
 
-/* OFFICIAL DOCUMENT STORAGE VAULT (Always Displays 👁️ View Document Button) */
+/* OFFICIAL DOCUMENT STORAGE VAULT */
 function documents() {
-  let docs = db.documents || seed.documents;
+  let docs = db.documents || [];
   let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
 
   let notifBanner = !notifGranted ? `
@@ -587,9 +620,9 @@ function documents() {
     </div>
   ` : '';
 
-
-  let cards = docs.map(doc => {
+  let cards = docs.length ? docs.map(doc => {
     let hasPhoto = hasValidImage(doc.image);
+    let isPdf = isPdfData(doc.image);
     return `
     <div class="doc-card">
       <div class="doc-header">
@@ -606,23 +639,30 @@ function documents() {
         <span class="doc-status-badge ${doc.status === 'Approved' ? 'approved' : 'pending'}">● ${escapeHtml(doc.status || 'Approved')}</span>
       </div>
 
-      <div style="margin: 6px 0;">
-        ${hasPhoto ? (isPdfData(doc.image) ? `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#1d4ed8; background:#dbeafe; padding:2px 8px; border-radius:6px; font-weight:600;">📄 PDF Attached</span>` : `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:6px; font-weight:600;">📎 Photo Attached</span>`) : `<span class="no-bill-badge" style="font-size:11px;">No document available</span>`}
+      <div style="margin: 8px 0;">
+        ${hasPhoto ? (isPdf ? `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:#1d4ed8; background:#dbeafe; padding:3px 10px; border-radius:6px; font-weight:700;">📄 PDF Attached</span>` : `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:#15803d; background:#dcfce7; padding:3px 10px; border-radius:6px; font-weight:700;">📎 Photo Attached</span>`) : `<span class="no-bill-badge" style="font-size:11px;">⏳ No file uploaded yet</span>`}
       </div>
 
-      ${doc.note ? `<p style="margin:0; font-size:11px; color:#5c473e; line-height:1.4;">${escapeHtml(doc.note)}</p>` : ''}
+      ${doc.note ? `<p style="margin:0 0 8px 0; font-size:12px; color:#5c473e; line-height:1.4;">${escapeHtml(doc.note)}</p>` : ''}
 
-      <div class="doc-actions" style="margin-top:8px;">
-        <button class="primary-btn" onclick="openDocumentModal('${doc.id}')" style="background:#8b1e3f; color:#fff;">👁️ View Document</button>
-        <button class="outline-btn" style="color:#8b261e;" onclick="guardEdit('document','${doc.id}')">📎 ${hasPhoto ? 'Replace Photo' : 'Upload Scan'}</button>
-        <button class="outline-btn" style="color:#dc2626; border-color:#fca5a5; padding:6px 10px;" onclick="guardEdit('document','${doc.id}')" title="Manage / Delete">🗑️ Delete</button>
+      <div class="doc-actions" style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="primary-btn" onclick="openDocumentModal('${doc.id}')" style="background:#8b1e3f; color:#fff; flex:1; min-width:120px;">👁️ View Document</button>
+        <button class="outline-btn" style="color:#8b261e;" onclick="openDocForm(getItem('document','${doc.id}'))">✏️ Edit / File</button>
+        <button class="outline-btn" style="color:#dc2626; border-color:#fca5a5;" onclick="confirmDelete('document','${doc.id}')" title="Delete">🗑️</button>
       </div>
     </div>
-  `;}).join('');
+  `;}).join('') : `
+    <div class="empty" style="grid-column: 1 / -1; padding: 40px 20px; text-align: center;">
+      <div class="empty-icon" style="font-size:48px; margin-bottom:8px;">📁</div>
+      <h3 style="color:#7d1c12; margin:0 0 6px 0;">अद्याप कोणतीही अधिकृत परवानगी जोडलेली नाही</h3>
+      <p style="color:#6e584f; font-size:13px; margin:0 0 16px 0;">मंडळाच्या पोलीस, ग्रामपंचायत, वीज वितरण परवानग्यांचे फोटो किंवा PDF अपलोड करण्यासाठी खालील बटण दाबा.</p>
+      <button class="primary-btn" onclick="openDocForm()">+ Upload New Permission</button>
+    </div>
+  `;
 
   return shell(
     'Official Permissions & Document Vault',
-    'पोलीस ठाणे, ग्रामपंचायत, वीज वितरण व इतर कायदेशीर परवानग्या',
+    'पोलीस ठाणे, ग्रामपंचायत, वीज वितरण व इतर कायदेशीर परवानग्यांचे फोटो व PDF',
     `${notifBanner}
     <div class="card">
       <div class="toolbar">
@@ -638,52 +678,54 @@ function documents() {
 
 /* Dedicated High-Res Document Viewer & Pending Status Modal */
 function openDocumentModal(docId) {
-  let doc = (db.documents || seed.documents).find(x => String(x.id) === String(docId));
+  let doc = (db.documents || []).find(x => String(x.id) === String(docId));
   if (!doc) return toast('Document not found');
 
   if (hasValidImage(doc.image)) {
     let isPdf = isPdfData(doc.image);
     modal('Official Document View', `
       <div class="bill-modal-content">
-        <div style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:8px;">
-          <h4 style="margin:0; color:#941838;">${escapeHtml(doc.title)}</h4>
+        <div style="margin-bottom:12px; border-bottom:1px solid #eee; padding-bottom:8px;">
+          <h3 style="margin:0 0 4px 0; color:#8b261e; font-size:18px;">${escapeHtml(doc.title)}</h3>
           <span style="font-size:12px; color:#6b7280;">${escapeHtml(doc.outwardNo || '')} • ${escapeHtml(doc.issuedBy || '')}</span>
         </div>
         ${isPdf ? `
           <div style="text-align:center; padding:8px 0;">
             <div style="font-size:48px; margin-bottom:8px;">📄</div>
-            <iframe src="${doc.image}" style="width:100%; height:380px; border:1px solid #e5e7eb; border-radius:8px;" title="Document PDF"></iframe>
+            <p style="font-weight:700; color:#7d1c12; margin:0 0 12px 0;">PDF Document Attached</p>
+            <iframe src="${doc.image}" style="width:100%; height:420px; border:1.5px solid #e5e7eb; border-radius:10px;" title="Document PDF"></iframe>
           </div>
         ` : `
-          <img class="bill-preview" src="${doc.image}" alt="${escapeHtml(doc.title)}" style="max-height:65vh; object-fit:contain; border-radius:8px; border:1px solid #e5e7eb;">
+          <div style="text-align:center; background:#fafafa; border-radius:10px; padding:6px; border:1px solid #eee;">
+            <img class="bill-preview" src="${doc.image}" alt="${escapeHtml(doc.title)}" style="max-height:68vh; max-width:100%; object-fit:contain; border-radius:6px;">
+          </div>
         `}
-        <div class="modal-actions" style="margin-top:14px; justify-content:center; gap:8px;">
-          <a class="primary-btn" href="${doc.image}" download="${(doc.title || 'mandal-doc').replace(/\s+/g, '_')}${isPdf ? '.pdf' : '.jpg'}" target="_blank">⬇️ Download File</a>
-          <button class="outline-btn" onclick="guardEdit('document','${doc.id}')">📎 Replace File</button>
+        <div class="modal-actions" style="margin-top:16px; justify-content:center; gap:10px; flex-wrap:wrap;">
+          <a class="primary-btn" href="${doc.image}" download="${(doc.title || 'mandal-doc').replace(/\s+/g, '_')}${isPdf ? '.pdf' : '.jpg'}" target="_blank" style="text-decoration:none;">⬇️ Download / Open Full File</a>
+          <button class="outline-btn" onclick="openDocForm(getItem('document','${doc.id}'))">✏️ Edit / Replace File</button>
           <button class="outline-btn" onclick="closeModal()">Close</button>
         </div>
       </div>
     `);
   } else {
-    // If no physical photo uploaded yet, display friendly pending status
     modal('Official Permission Status', `
       <div class="bill-modal-content no-bill-view">
         <div class="no-bill-icon">📄</div>
-        <h4 style="color:#8b261e; margin:0 0 6px 0;">No document available</h4>
+        <h4 style="color:#8b261e; margin:0 0 6px 0;">No document file uploaded yet</h4>
         <p style="color:#b45309; font-weight:600; font-size:13px; margin:0 0 12px 0;">⏳ Permission Pending (परवानगी प्रलंबित)</p>
-        <p style="font-size:12px; color:#6e584f; margin:0 0 14px 0; line-height:1.5;">
-          <b>${escapeHtml(doc.title)}</b> साठी कागदपत्र किंवा परवानग्या प्रत अद्याप जोडलेली नाही.
+        <p style="font-size:13px; color:#6e584f; margin:0 0 16px 0; line-height:1.5;">
+          <b>${escapeHtml(doc.title)}</b> साठी कागदपत्राचा फोटो किंवा PDF अद्याप जोडलेली नाही.
         </p>
 
-        <div style="background:#fff7ed; border-radius:8px; padding:10px 14px; text-align:left; font-size:12px; margin-bottom:16px; border:1px solid #fed7aa;">
+        <div style="background:#fff7ed; border-radius:8px; padding:12px 14px; text-align:left; font-size:13px; margin-bottom:18px; border:1px solid #fed7aa;">
           <div style="margin-bottom:4px;"><b>विभाग / कार्यालय:</b> ${escapeHtml(doc.issuedBy || 'अधिकृत विभाग')}</div>
           <div style="margin-bottom:4px;"><b>जावक क्र.:</b> ${escapeHtml(doc.outwardNo || 'उपलब्ध नाही')}</div>
           <div style="margin-bottom:4px;"><b>वैधता:</b> ${escapeHtml(doc.validUntil || 'कायमस्वरूपी')}</div>
           <div><b>स्थिती:</b> <span class="doc-status-badge ${doc.status === 'Approved' ? 'approved' : 'pending'}">● ${escapeHtml(doc.status || 'Pending')}</span></div>
         </div>
 
-        <div class="modal-actions" style="justify-content:center; gap:8px;">
-          <button class="primary-btn" onclick="guardEdit('document','${doc.id}')">📎 Upload Permission Photo</button>
+        <div class="modal-actions" style="justify-content:center; gap:10px;">
+          <button class="primary-btn" onclick="openDocForm(getItem('document','${doc.id}'))">📎 Upload Permission Photo / PDF</button>
           <button class="outline-btn" onclick="closeModal()">Close</button>
         </div>
       </div>
@@ -694,6 +736,7 @@ function openDocumentModal(docId) {
 function openDocForm(item = null) {
   let x = item || {};
   let validImg = hasValidImage(x.image) ? x.image : '';
+  let isPdf = isPdfData(validImg);
   modal(
     (item ? 'Edit ' : 'Upload ') + 'Official Permission / Document',
     `<form onsubmit="submitDocForm(event,'${x.id || ''}')" novalidate>
@@ -701,13 +744,30 @@ function openDocForm(item = null) {
         <div class="field full"><label>Document Title / Permission Name</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. पोलीस ठाणे मंडप परवानगी"></div>
         <div class="field"><label>Category</label><select name="category">${['Police Permission', 'Gram Panchayat NOC', 'MSEDCL Electricity', 'Sound / Loudspeaker', 'Trust Registration', 'Fire Safety NOC', 'Other'].map(v => `<option ${x.category === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
         <div class="field"><label>Outward / Ref Number (जावक क्र.)</label><input name="outwardNo" value="${escapeHtml(x.outwardNo || '')}" placeholder="e.g. जावक क्र. ४५/२०२६"></div>
-        <div class="field full"><label>Issuing Authority / Office</label><input name="issuedBy" required value="${escapeHtml(x.issuedBy || '')}" placeholder="e.g. मिरज ग्रामीण पोलीस ठाणे / ग्रामपंचायत कवलापूर"></div>
+        <div class="field full"><label>Issuing Authority / Office</label><input name="issuedBy" required value="${escapeHtml(x.issuedBy || '')}" placeholder="e.g. मिरज ग्रामीण पोलीस ठाणे / ग्रामपंचायत"></div>
         <div class="field"><label>Valid From</label><input name="validFrom" type="date" value="${x.validFrom || today}"></div>
         <div class="field"><label>Valid Until / Expiry</label><input name="validUntil" value="${escapeHtml(x.validUntil || '2026-08-30')}" placeholder="e.g. 2026-08-30 किंवा कायमस्वरूपी"></div>
         <div class="field"><label>Status</label><select name="status"><option ${x.status === 'Approved' ? 'selected' : ''}>Approved</option><option ${x.status === 'Pending' ? 'selected' : ''}>Pending</option></select></div>
-        <div class="field full"><label>Permission Document (Upload Image or PDF)</label><input name="image" type="file" accept="image/*,application/pdf,.pdf" onchange="previewBillInput(this)"></div>
+        <div class="field full">
+          <label>Permission Document (Upload Photo or PDF in any format)</label>
+          <input name="image" type="file" accept="image/*,application/pdf,.pdf,*/*" onchange="previewBillInput(this)">
+          <div style="font-size:11px; color:#8b261e; margin-top:4px;">📷 फोटो (Camera/Gallery) किंवा 📄 PDF फाइल निवडू शकता</div>
+        </div>
         <div class="field full" id="billFormPreview">
-          ${validImg ? `<div class="bill-preview-box"><img src="${validImg}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${validImg}')">👁 View Full Document</button></div>` : ''}
+          ${validImg ? (isPdf ? `
+            <div class="bill-preview-box" style="text-align:center; padding:12px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px;">
+              <div style="font-size:32px;">📄</div>
+              <strong style="color:#0369a1; font-size:13px;">PDF Document Attached</strong>
+              <div style="margin-top:6px;">
+                <button type="button" class="text-link" onclick="openBill('${validImg}')">👁 View PDF</button>
+              </div>
+            </div>
+          ` : `
+            <div class="bill-preview-box">
+              <img src="${validImg}" alt="Attached Document">
+              <button type="button" class="text-link" onclick="openBill('${validImg}')">👁 View Full Photo</button>
+            </div>
+          `) : ''}
         </div>
         <div class="field full"><label>Notes / Terms</label><textarea name="note" placeholder="e.g. रात्री १०:०० वाजेपर्यंत ध्वनीक्षेपक कायदेशीर मंजुरी.">${escapeHtml(x.note || '')}</textarea></div>
       </div>
@@ -736,17 +796,20 @@ async function submitDocForm(ev, id) {
 
   let file = f.get('image');
   if (file && file.size) {
-    let isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    let isPdf = file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'));
     if (isPdf) {
-      if (file.size > 8 * 1024 * 1024) {
-        toast('कृपया 8MB पेक्षा लहान PDF निवडा (Please choose PDF under 8MB)');
+      if (file.size > 10 * 1024 * 1024) {
+        toast('कृपया 10MB पेक्षा लहान PDF निवडा (Please choose PDF under 10MB)');
         return;
       }
       o.image = await readFileAsDataUrl(file);
-    } else if (file.type && file.type.startsWith('image/')) {
-      o.image = await compressImage(file, 1400, 0.82);
     } else {
-      o.image = (existing && hasValidImage(existing.image)) ? existing.image : '';
+      try {
+        let compressed = await compressImage(file, 1200, 0.78);
+        o.image = hasValidImage(compressed) ? compressed : await readFileAsDataUrl(file);
+      } catch(err) {
+        o.image = await readFileAsDataUrl(file);
+      }
     }
   } else {
     o.image = (existing && hasValidImage(existing.image)) ? existing.image : '';
@@ -765,16 +828,25 @@ async function submitDocForm(ev, id) {
   db.documents = list;
   save();
   closeModal();
-  toast('Official document saved successfully!');
+  toast('Official document saved successfully! (कागदपत्र जतन झाले)');
   render();
+
   // Sync document to Supabase cloud
   if (cloud) {
     let docPayload = {
-      id: o.id, mandal_id: currentMandal.id,
-      title: o.title || '', category: o.category || '', icon: o.icon || '📄',
-      outward_no: o.outwardNo || '', issued_by: o.issuedBy || '',
-      valid_from: o.validFrom || '', valid_until: o.validUntil || '',
-      status: o.status || 'Pending', note: o.note || '', image: o.image || ''
+      id: o.id,
+      mandal_id: currentMandal.id,
+      title: o.title || '',
+      category: o.category || '',
+      icon: o.icon || '📄',
+      outward_no: o.outwardNo || '',
+      issued_by: o.issuedBy || '',
+      valid_from: o.validFrom || '',
+      valid_until: o.validUntil || '',
+      status: o.status || 'Pending',
+      note: o.note || '',
+      image: o.image || '',
+      image_url: o.image || ''
     };
     let isExisting = index >= 0;
     if (isExisting) {
