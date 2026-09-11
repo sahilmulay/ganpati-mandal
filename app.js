@@ -32,6 +32,17 @@ const currentMandal = {
 })();
 
 /* Logout */
+
+function confirmLogoutGlobal() {
+  modal('Logout (लॉगआउट)', `
+    <p class="delete-text">तुम्हाला <b>${escapeHtml(currentMandal.name)}</b> मधून खरोखर लॉगआउट करायचे आहे का?</p>
+    <div class="modal-actions" style="justify-content:center; gap:10px;">
+      <button class="outline-btn" onclick="closeModal()">Cancel</button>
+      <button class="primary-btn" style="background:#dc2626; border-color:#dc2626; color:#fff;" onclick="logoutMandal()">⏏ Yes, Logout</button>
+    </div>
+  `);
+}
+
 function logoutMandal() {
   sessionStorage.clear();
   localStorage.removeItem('ganesh-mandal-data-' + (currentMandal.id || ''));
@@ -204,6 +215,21 @@ function compressImage(file, maxDimension = 1400, quality = 0.82) {
   });
 }
 
+
+function isPdfData(url) {
+  if (!url || typeof url !== 'string') return false;
+  return url.startsWith('data:application/pdf') || url.toLowerCase().includes('.pdf');
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve) => {
+    let reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+}
+
 function hasValidImage(img) {
   if (!img) return false;
   if (typeof img !== 'string') return false;
@@ -241,7 +267,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v11';
+const DATA_VERSION = '2026-mandal-prod-v12';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -486,7 +512,14 @@ function updatePageHeaderAndBrand() {
   document.querySelectorAll('.brand strong, #sidebarMandalName').forEach(el => el.textContent = name);
   document.querySelectorAll('.location span, #topbarMandalName').forEach(el => el.textContent = name);
   document.querySelectorAll('.location small, #topbarLocation').forEach(el => el.textContent = (city ? city + ' • ' : '') + 'Private Portal');
-  document.querySelectorAll('.side-foot').forEach(el => el.innerHTML = '<span class="online-dot"></span> ' + escapeHtml(slug));
+  document.querySelectorAll('.side-foot').forEach(el => {
+    el.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <div><span class="online-dot"></span> ${escapeHtml(slug)}</div>
+        <button onclick="confirmLogoutGlobal()" style="background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">⏏ Logout</button>
+      </div>
+    `;
+  });
   if (detectCurrentPage() !== 'public') {
     document.title = name + ' - Manager';
   }
@@ -574,7 +607,7 @@ function documents() {
       </div>
 
       <div style="margin: 6px 0;">
-        ${hasPhoto ? `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:6px; font-weight:600;">📎 Photo Attached</span>` : `<span class="no-bill-badge" style="font-size:11px;">No document available</span>`}
+        ${hasPhoto ? (isPdfData(doc.image) ? `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#1d4ed8; background:#dbeafe; padding:2px 8px; border-radius:6px; font-weight:600;">📄 PDF Attached</span>` : `<span class="doc-badge has-photo" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:6px; font-weight:600;">📎 Photo Attached</span>`) : `<span class="no-bill-badge" style="font-size:11px;">No document available</span>`}
       </div>
 
       ${doc.note ? `<p style="margin:0; font-size:11px; color:#5c473e; line-height:1.4;">${escapeHtml(doc.note)}</p>` : ''}
@@ -609,17 +642,24 @@ function openDocumentModal(docId) {
   if (!doc) return toast('Document not found');
 
   if (hasValidImage(doc.image)) {
-    // If a scanned photo or PDF image is attached, show full high-res photo view
+    let isPdf = isPdfData(doc.image);
     modal('Official Document View', `
       <div class="bill-modal-content">
         <div style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:8px;">
           <h4 style="margin:0; color:#941838;">${escapeHtml(doc.title)}</h4>
           <span style="font-size:12px; color:#6b7280;">${escapeHtml(doc.outwardNo || '')} • ${escapeHtml(doc.issuedBy || '')}</span>
         </div>
-        <img class="bill-preview" src="${doc.image}" alt="${escapeHtml(doc.title)}" style="max-height:65vh; object-fit:contain; border-radius:8px; border:1px solid #e5e7eb;">
+        ${isPdf ? `
+          <div style="text-align:center; padding:8px 0;">
+            <div style="font-size:48px; margin-bottom:8px;">📄</div>
+            <iframe src="${doc.image}" style="width:100%; height:380px; border:1px solid #e5e7eb; border-radius:8px;" title="Document PDF"></iframe>
+          </div>
+        ` : `
+          <img class="bill-preview" src="${doc.image}" alt="${escapeHtml(doc.title)}" style="max-height:65vh; object-fit:contain; border-radius:8px; border:1px solid #e5e7eb;">
+        `}
         <div class="modal-actions" style="margin-top:14px; justify-content:center; gap:8px;">
-          <a class="primary-btn" href="${doc.image}" download="${(doc.title || 'mandal-doc').replace(/\s+/g, '_')}.jpg" target="_blank">⬇️ Download File</a>
-          <button class="outline-btn" onclick="guardEdit('document','${doc.id}')">📎 Replace Photo</button>
+          <a class="primary-btn" href="${doc.image}" download="${(doc.title || 'mandal-doc').replace(/\s+/g, '_')}${isPdf ? '.pdf' : '.jpg'}" target="_blank">⬇️ Download File</a>
+          <button class="outline-btn" onclick="guardEdit('document','${doc.id}')">📎 Replace File</button>
           <button class="outline-btn" onclick="closeModal()">Close</button>
         </div>
       </div>
@@ -665,7 +705,7 @@ function openDocForm(item = null) {
         <div class="field"><label>Valid From</label><input name="validFrom" type="date" value="${x.validFrom || today}"></div>
         <div class="field"><label>Valid Until / Expiry</label><input name="validUntil" value="${escapeHtml(x.validUntil || '2026-08-30')}" placeholder="e.g. 2026-08-30 किंवा कायमस्वरूपी"></div>
         <div class="field"><label>Status</label><select name="status"><option ${x.status === 'Approved' ? 'selected' : ''}>Approved</option><option ${x.status === 'Pending' ? 'selected' : ''}>Pending</option></select></div>
-        <div class="field full"><label>Permission Document Photo / Scan (Upload Image)</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+        <div class="field full"><label>Permission Document (Upload Image or PDF)</label><input name="image" type="file" accept="image/*,application/pdf,.pdf" onchange="previewBillInput(this)"></div>
         <div class="field full" id="billFormPreview">
           ${validImg ? `<div class="bill-preview-box"><img src="${validImg}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${validImg}')">👁 View Full Document</button></div>` : ''}
         </div>
@@ -695,8 +735,19 @@ async function submitDocForm(ev, id) {
   let existing = id ? list.find(x => String(x.id) === String(id)) : null;
 
   let file = f.get('image');
-  if (file && file.size && file.type && file.type.startsWith('image/')) {
-    o.image = await compressImage(file, 1400, 0.82);
+  if (file && file.size) {
+    let isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      if (file.size > 8 * 1024 * 1024) {
+        toast('कृपया 8MB पेक्षा लहान PDF निवडा (Please choose PDF under 8MB)');
+        return;
+      }
+      o.image = await readFileAsDataUrl(file);
+    } else if (file.type && file.type.startsWith('image/')) {
+      o.image = await compressImage(file, 1400, 0.82);
+    } else {
+      o.image = (existing && hasValidImage(existing.image)) ? existing.image : '';
+    }
   } else {
     o.image = (existing && hasValidImage(existing.image)) ? existing.image : '';
   }
@@ -1683,6 +1734,25 @@ function closeModal() {
 function previewBillInput(input) {
   let file = input.files && input.files[0];
   if (!file) return;
+  let isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  if (isPdf) {
+    readFileAsDataUrl(file).then(pdfUrl => {
+      let container = document.getElementById('billFormPreview');
+      if (container && pdfUrl) {
+        container.innerHTML = `
+          <div class="bill-preview-box" style="text-align:center; padding:12px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px;">
+            <div style="font-size:32px; margin-bottom:4px;">📄</div>
+            <strong style="font-size:13px; color:#0369a1; display:block;">${escapeHtml(file.name)}</strong>
+            <span style="font-size:11px; color:#64748b;">(${(file.size / 1024).toFixed(1)} KB PDF)</span>
+            <div style="margin-top:8px;">
+              <button type="button" class="text-link" onclick="openBill('${pdfUrl}')">👁 View PDF Document</button>
+            </div>
+          </div>
+        `;
+      }
+    });
+    return;
+  }
   compressImage(file, 1400, 0.82).then(compressedUrl => {
     let container = document.getElementById('billFormPreview');
     if (container && compressedUrl) {
@@ -1760,7 +1830,7 @@ function openForm(type, item = null) {
       <div class="field"><label>Outward No (जावक क्र.)</label><input name="outwardNo" value="${escapeHtml(x.outwardNo || '')}"></div>
       <div class="field full"><label>Issuing Office</label><input name="issuedBy" required value="${escapeHtml(x.issuedBy || '')}"></div>
       <div class="field"><label>Valid Until</label><input name="validUntil" value="${escapeHtml(x.validUntil || '2026-08-30')}"></div>
-      <div class="field full"><label>Document Scan / Photo</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+      <div class="field full"><label>Document Scan / PDF File</label><input name="image" type="file" accept="image/*,application/pdf,.pdf" onchange="previewBillInput(this)"></div>
       <div class="field full" id="billFormPreview">
         ${x.image ? `<div class="bill-preview-box"><img src="${x.image}" alt="Attached Document"><button type="button" class="text-link" onclick="openBill('${x.image}')">👁 View Full Document</button></div>` : ''}
       </div>
@@ -1818,9 +1888,24 @@ async function submitForm(ev, type, id) {
   if (['donation', 'expense'].includes(type)) o.amount = Number(o.amount);
   
   let file = f.get('image');
-  if (file && file.size && file.type && file.type.startsWith('image/')) {
-    o.image = await compressImage(file, 1400, 0.82);
-    saveItem(type, id, o);
+  if (file && file.size) {
+    let isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      if (file.size > 8 * 1024 * 1024) {
+        toast('कृपया 8MB पेक्षा लहान PDF निवडा (Please choose PDF under 8MB)');
+        return;
+      }
+      o.image = await readFileAsDataUrl(file);
+      saveItem(type, id, o);
+    } else if (file.type && file.type.startsWith('image/')) {
+      o.image = await compressImage(file, 1400, 0.82);
+      saveItem(type, id, o);
+    } else {
+      let list = db[listName[type]];
+      let existingItem = id && list ? list.find(x => String(x.id) === String(id)) : null;
+      o.image = (existingItem && hasValidImage(existingItem.image)) ? existingItem.image : '';
+      saveItem(type, id, o);
+    }
   } else {
     let list = db[listName[type]];
     let existingItem = id && list ? list.find(x => String(x.id) === String(id)) : null;
@@ -1996,6 +2081,23 @@ function openBill(image) {
         <h4>No bill available</h4>
         <p>या खर्चासाठी कोणतीही पावती किंवा बिल जोडलेले नाही.</p>
         <div class="modal-actions" style="justify-content:center; margin-top:14px;">
+          <button class="outline-btn" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `);
+    return;
+  }
+  if (isPdfData(image)) {
+    modal('Document / Photo View', `
+      <div class="bill-modal-content" style="text-align:center;">
+        <div style="font-size:52px; margin-bottom:8px;">📄</div>
+        <h4 style="color:#7d1c12; margin:0 0 6px 0;">Official PDF Document</h4>
+        <p style="color:#6e584f; font-size:13px; margin:0 0 14px 0;">हे कागदपत्र PDF स्वरूपात उपलब्ध आहे.</p>
+        <div style="margin-bottom:14px;">
+          <iframe src="${escapeHtml(image)}" style="width:100%; height:360px; border:1px solid #e0cdc0; border-radius:10px;" title="PDF Preview"></iframe>
+        </div>
+        <div class="modal-actions" style="justify-content:center; gap:10px;">
+          <a class="primary-btn" href="${escapeHtml(image)}" download="mandal-document.pdf" target="_blank">⬇️ Download / Open PDF</a>
           <button class="outline-btn" onclick="closeModal()">Close</button>
         </div>
       </div>
@@ -2580,7 +2682,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.onclick = () => document.querySelector('.sidebar')?.classList.toggle('open');
   let settingsBtn = document.getElementById('settingsBtn');
-  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note"><strong>${currentMandal.name}</strong><br>${currentMandal.city}<br>Nondani: ${currentMandal.nondani}</p><div class="modal-actions"><button class="primary-btn" onclick="window.location.href='settings.html'">⚙️ Mandal Settings</button><button class="outline-btn" onclick="requestNotificationPermission()">🔔 Notifications</button><button class="outline-btn" onclick="logoutMandal()">⏏ Logout</button></div>`);
+  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note"><strong>${currentMandal.name}</strong><br>${currentMandal.city}<br>Nondani: ${currentMandal.nondani}</p><div class="modal-actions"><button class="primary-btn" onclick="window.location.href='settings.html'">⚙️ Mandal Settings</button><button class="outline-btn" onclick="requestNotificationPermission()">🔔 Notifications</button><button class="primary-btn" style="background:#dc2626; border-color:#dc2626; color:#fff;" onclick="confirmLogoutGlobal()">⏏ Logout</button></div>`);
   let modalEl = document.getElementById('modal');
   if (modalEl) modalEl.onclick = e => { if (e.target.id === 'modal') closeModal(); };
 

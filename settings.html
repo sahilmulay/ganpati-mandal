@@ -41,7 +41,7 @@
     <div id="toast"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="app.js?v=20260911-6"></script>
+    <script src="app.js?v=20260911-7"></script>
     <script>
       window.addEventListener('DOMContentLoaded', () => {
         updatePageHeaderAndBrand();
@@ -171,6 +171,17 @@
                 <button class="outline-btn" onclick="navigator.clipboard.writeText('https://ganpati-mandal-zeta.vercel.app/public.html?mandal=${currentMandal.slug}'); toast('Link copied!')">📋 Copy Link</button>
                 <a class="primary-btn" href="public.html?mandal=${encodeURIComponent(currentMandal.slug)}" target="_blank" style="text-decoration:none; display:inline-block;">Open Portal ↗</a>
               </div>
+            </div>
+
+            <!-- 7. DANGER ZONE: DELETE MANDAL -->
+            <div class="card" style="border:1.5px solid #fecaca; background:#fffdfd; margin-top:20px;">
+              <h3 style="margin:0 0 8px 0; color:#dc2626; font-size:16px;">⚠️ Danger Zone — Delete Mandal (मंडळ कायमचे हटवा)</h3>
+              <p style="font-size:13px; color:#7f1d1d; margin:0 0 14px 0; line-height:1.5;">
+                जर तुम्हाला हे मंडळ आणि त्याचे सर्व रेकॉर्ड्स (देणगी, खर्च, आरती, नोटीस, कागदपत्रे) कायमचे काढून टाकायचे असतील, तर खालील बटण वापरा. ही क्रिया पूर्ववत केली जाऊ शकत नाही.
+              </p>
+              <button class="primary-btn" style="background:#dc2626; border-color:#dc2626; color:#fff;" onclick="openDeleteMandalModal()">
+                🗑️ Delete Entire Mandal &amp; All Data
+              </button>
             </div>
 
             <div class="footer">${escapeHtml(currentMandal.name)} Manager</div>
@@ -336,7 +347,70 @@
       }
 
       function confirmLogout() {
-        modal('Logout', `<p class="delete-text">Are you sure you want to logout from ${escapeHtml(currentMandal.name)}?</p><div class="modal-actions"><button class="outline-btn" onclick="closeModal()">Cancel</button><button class="primary-btn" onclick="logoutMandal()">Logout</button></div>`);
+        modal('Logout (लॉगआउट)', `
+          <p class="delete-text">तुम्हाला <b>${escapeHtml(currentMandal.name)}</b> मधून खरोखर लॉगआउट करायचे आहे का?</p>
+          <div class="modal-actions" style="justify-content:center; gap:10px;">
+            <button class="outline-btn" onclick="closeModal()">Cancel</button>
+            <button class="primary-btn" style="background:#dc2626; border-color:#dc2626; color:#fff;" onclick="logoutMandal()">⏏ Yes, Logout</button>
+          </div>
+        `);
+      }
+
+      function openDeleteMandalModal() {
+        if (currentMandal.slug === 'vrindavan') {
+          modal('Action Restricted', '<p class="delete-text">वृंदावन हे मूळ डीफॉल्ट मंडळ असल्याने थेट हटवता येणार नाही. (Root default mandal cannot be deleted).</p><div class="modal-actions"><button class="outline-btn" onclick="closeModal()">OK</button></div>');
+          return;
+        }
+        modal('Delete Mandal & All Data', `
+          <form onsubmit="executeDeleteMandal(event)">
+            <p style="color:#b91c1c; font-size:13px; font-weight:600; margin-bottom:12px;">
+              ⚠️ सावधान: हे मंडळ हटवल्यास सर्व देणग्या, खर्च, आरती व कागदपत्रे कायमची नष्ट होतील.
+            </p>
+            <div class="field">
+              <label>खात्री करण्यासाठी मंडळाचा ID (Slug) टाईप करा: <b>${escapeHtml(currentMandal.slug)}</b></label>
+              <input name="slug" type="text" placeholder="${escapeHtml(currentMandal.slug)}" required autocomplete="off">
+            </div>
+            <div class="field">
+              <label>मंडळाचा Password (सध्याचा पासवर्ड)</label>
+              <input name="pass" type="password" required placeholder="••••••••">
+            </div>
+            <div class="field">
+              <label>मंडळाचा Financial PIN (४ अंकी पिन)</label>
+              <input name="pin" type="password" inputmode="numeric" maxlength="4" pattern="\\d{4}" required placeholder="••••">
+            </div>
+            <div class="modal-actions" style="justify-content:space-between; margin-top:16px;">
+              <button class="outline-btn" type="button" onclick="closeModal()">Cancel</button>
+              <button class="primary-btn" type="submit" style="background:#dc2626; border-color:#dc2626; color:#fff;">🗑️ Permanently Delete Mandal</button>
+            </div>
+          </form>
+        `);
+      }
+
+      async function executeDeleteMandal(e) {
+        e.preventDefault();
+        let f = new FormData(e.target);
+        if (f.get('slug').trim().toLowerCase() !== currentMandal.slug.toLowerCase()) {
+          toast('❌ Mandal ID (Slug) जुळत नाही. कृपया अचूक Slug टाईप करा.');
+          return;
+        }
+        let passHash = await hashPin(f.get('pass'));
+        let pinHash = await hashPin(f.get('pin'));
+
+        let { data, error } = await cloud.rpc('delete_mandal', {
+          p_mandal_id: currentMandal.id,
+          p_password_hash: passHash,
+          p_pin_hash: pinHash
+        });
+
+        if (error || (data && data.error)) {
+          toast('❌ ' + ((data && data.error) || error.message));
+          return;
+        }
+
+        sessionStorage.clear();
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        alert('✅ मंडळ आणि सर्व डेटा यशस्वीरित्या हटवण्यात आला आहे.');
+        window.location.href = 'login.html';
       }
     </script>
   </body>

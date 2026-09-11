@@ -241,6 +241,45 @@ drop policy if exists "Shared document images" on storage.objects;
 create policy "Shared document images" on storage.objects for all to anon
   using (bucket_id = 'mandal-documents') with check (bucket_id = 'mandal-documents');
 
+
+-- ─── 15. RPC: delete_mandal ──────────────────────────────────
+-- Allows deleting a mandal and cascading to delete all records
+create or replace function public.delete_mandal(
+  p_mandal_id     uuid,
+  p_password_hash text,
+  p_pin_hash      text
+)
+returns json
+language plpgsql
+security definer
+as $$
+declare
+  v_row public.mandals%rowtype;
+begin
+  select * into v_row from public.mandals
+  where id = p_mandal_id and password_hash = p_password_hash and pin_hash = p_pin_hash limit 1;
+
+  if not found then
+    return json_build_object('error', 'Authentication failed: Incorrect password or PIN.');
+  end if;
+
+  -- Delete all associated mandal records
+  delete from public.donations where mandal_id = p_mandal_id;
+  delete from public.expenses  where mandal_id = p_mandal_id;
+  delete from public.aartis    where mandal_id = p_mandal_id;
+  delete from public.events    where mandal_id = p_mandal_id;
+  delete from public.contacts  where mandal_id = p_mandal_id;
+  delete from public.documents where mandal_id = p_mandal_id;
+  delete from public.alankar   where mandal_id = p_mandal_id;
+
+  -- Delete the mandal itself
+  delete from public.mandals where id = p_mandal_id;
+
+  return json_build_object('ok', true);
+end;
+$$;
+grant execute on function public.delete_mandal(uuid, text, text) to anon;
+
 -- ─── DONE ────────────────────────────────────────────────────
 -- वृंदावन मंडळ login: slug = vrindavan, password = 2026
 -- Change password immediately in Settings after first login.
