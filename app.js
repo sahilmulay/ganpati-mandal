@@ -1,11 +1,44 @@
 /* Set FINANCIAL_PIN_HASH and optional cloud adapter values before sharing externally. */
-const FINANCIAL_PIN_HASH = '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; // SHA-256 hash of '2026'
+// PIN hash is now dynamic — loaded from mandals table after login
+function getFinancialPinHash() { return sessionStorage.getItem('mandal_pin_hash') || '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; }
 
 const CLOUD_CONFIG = {
   url: 'https://wrvvnqanjtrmmltoaxvg.supabase.co',
   publishableKey: 'sb_publishable_1isjm1Z4wAtnI0pdzGpmIg_Yc0Q7KSw'
 };
 const cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
+
+/* ── Multi-Mandal Auth Session ─────────────────────────────────────────────── */
+// currentMandal is populated from sessionStorage after login.
+// On public.html it is loaded by slug from URL param instead.
+const currentMandal = {
+  get id()       { return sessionStorage.getItem('mandal_id')       || '00000000-0000-0000-0000-000000000001'; },
+  get slug()     { return sessionStorage.getItem('mandal_slug')     || 'vrindavan'; },
+  get name()     { return sessionStorage.getItem('mandal_name')     || 'वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ'; },
+  get city()     { return sessionStorage.getItem('mandal_city')     || 'Kavlapur, Miraj, Sangli'; },
+  get phone()    { return sessionStorage.getItem('mandal_phone')    || ''; },
+  get nondani()  { return sessionStorage.getItem('mandal_nondani')  || 'महा/220/14'; },
+  get pin_hash() { return sessionStorage.getItem('mandal_pin_hash') || '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; },
+  get passHash() { return sessionStorage.getItem('mandal_pass_hash') || ''; }
+};
+
+/* Auth guard — redirect to login if no session (skip on login.html and public.html) */
+(function authGuard() {
+  let path = (window.location.pathname || '').toLowerCase();
+  let isPublic = path.includes('public.html') || path.includes('login.html');
+  if (!isPublic && !sessionStorage.getItem('mandal_id')) {
+    window.location.href = 'login.html';
+  }
+})();
+
+/* Logout */
+function logoutMandal() {
+  sessionStorage.clear();
+  localStorage.removeItem('ganesh-mandal-data-' + (currentMandal.id || ''));
+  window.location.href = 'login.html';
+}
+
+
 
 /* Service Worker Registration for PWA & Push Notifications */
 let swRegistration = null;
@@ -274,13 +307,14 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v8';
-if (localStorage.getItem('mandal-data-version') !== DATA_VERSION) {
-  localStorage.removeItem('ganesh-mandal-data');
-  localStorage.setItem('mandal-data-version', DATA_VERSION);
+const DATA_VERSION = '2026-mandal-prod-v9';
+const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
+if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
+  localStorage.removeItem(LOCAL_STORAGE_KEY);
+  localStorage.setItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default'), DATA_VERSION);
 }
 
-let db = JSON.parse(localStorage.getItem('ganesh-mandal-data') || 'null') || seed;
+let db = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || 'null') || seed;
 if (!db.alankar) db.alankar = seed.alankar;
 if (!db.documents) db.documents = seed.documents;
 if (!db.donations) db.donations = [];
@@ -306,6 +340,7 @@ function detectCurrentPage() {
   if (path.includes('contacts')) return 'contacts';
   if (path.includes('reports')) return 'reports';
   if (path.includes('documents')) return 'documents';
+  if (path.includes('settings')) return 'settings';
   return 'dashboard';
 }
 
@@ -408,6 +443,7 @@ function toCloud(type, row) {
     copy.image_url = img;
   }
   delete copy.created_at;
+  copy.mandal_id = currentMandal.id;
   return copy;
 }
 
@@ -443,7 +479,7 @@ async function loadCloud() {
   let updatedAny = false;
   await Promise.allSettled(types.map(async (type) => {
     try {
-      let { data, error } = await cloud.from(tableName[type]).select('*');
+      let { data, error } = await cloud.from(tableName[type]).select('*').eq('mandal_id', currentMandal.id);
       if (error) {
         if (error.code === 'PGRST205') return;
         console.warn(`Supabase ${type} fetch error:`, error.message);
@@ -459,7 +495,7 @@ async function loadCloud() {
   }));
 
   if (updatedAny) {
-    localStorage.setItem('ganesh-mandal-data', JSON.stringify(db));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
     render();
   }
 }
@@ -477,12 +513,12 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function save() {
-  localStorage.setItem('ganesh-mandal-data', JSON.stringify(db));
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
   window.dispatchEvent(new Event('storage'));
 }
 
 window.addEventListener('storage', () => {
-  const d = localStorage.getItem('ganesh-mandal-data');
+  const d = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (d) {
     db = JSON.parse(d);
     render();
@@ -498,7 +534,8 @@ const nav = [
   ['documents.html', 'documents', '📁', 'Official Documents'],
   ['contacts.html', 'contacts', '☏', 'Committee Contacts'],
   ['reports.html', 'reports', '▥', 'Reports'],
-  ['public.html', 'public', '🌺', 'Public Portal']
+  ['public.html', 'public', '🌺', 'Public Portal'],
+  ['settings.html', 'settings', '⚙', 'Settings']
 ];
 
 function renderNav() {
@@ -529,7 +566,7 @@ function dateLabel(d) {
 }
 
 function shell(title, sub, body, action = '') {
-  return `<div class="page-wrap"><div class="page-heading"><div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(sub)}</p></div>${action}</div>${body}<div class="footer">वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ Manager</div></div>`;
+  return `<div class="page-wrap"><div class="page-heading"><div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(sub)}</p></div>${action}</div>${body}<div class="footer">${currentMandal.name} Manager</div></div>`;
 }
 
 function render() {
@@ -541,6 +578,7 @@ function render() {
   }
 
   renderNav();
+  if (pageName === 'settings') { renderNav(); return; }
   let p = { dashboard, donations, expenses, aarti, events, documents, contacts, reports, public: publicView }[pageName] || dashboard;
   let target = document.getElementById('page');
   if (target) target.innerHTML = p();
@@ -723,10 +761,31 @@ async function submitDocForm(ev, id) {
   closeModal();
   toast('Official document saved successfully!');
   render();
+  // Sync document to Supabase cloud
+  if (cloud) {
+    let docPayload = {
+      id: o.id, mandal_id: currentMandal.id,
+      title: o.title || '', category: o.category || '', icon: o.icon || '📄',
+      outward_no: o.outwardNo || '', issued_by: o.issuedBy || '',
+      valid_from: o.validFrom || '', valid_until: o.validUntil || '',
+      status: o.status || 'Pending', note: o.note || '', image: o.image || ''
+    };
+    let isExisting = index >= 0;
+    if (isExisting) {
+      cloud.from('documents').update(docPayload).eq('id', o.id).then(({error}) => {
+        if (error && error.code !== 'PGRST205') console.warn('Doc cloud update error:', error);
+      });
+    } else {
+      cloud.from('documents').insert(docPayload).then(({error}) => {
+        if (error && error.code !== 'PGRST205') console.warn('Doc cloud insert error:', error);
+      });
+    }
+  }
 }
 
 /* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD */
 function publicView() {
+  // On public.html the mandal name comes from the URL param (loaded by loadPublicMandalData)
   let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
   let alankars = sortByNewest(db.alankar || []);
   let sortedDonations = sortByNewest(db.donations);
@@ -1890,7 +1949,7 @@ async function checkPin(e) {
   e.preventDefault();
   let enteredPin = new FormData(e.target).get('pin');
   let enteredHash = await hashPin(enteredPin);
-  if (enteredHash === FINANCIAL_PIN_HASH) {
+  if (enteredHash === getFinancialPinHash()) {
     let { type, id } = editing;
     closeModal();
     if (type === 'document') {
@@ -2065,7 +2124,7 @@ function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
 function receiptText(d) {
   let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '23758';
   let dateFormatted = d.date ? d.date.split('-').reverse().join('-') : '31-08-2026';
-  return `॥ श्री गणेशाय नमः ॥\n\nवृंदावन कला, क्रीडा व सांस्कृतिक मंडळ\n\nदेणगी पावती क्र.: ${receiptNo}\nश्री/श्रीमती: ${d.name}\nरक्कम: ₹${d.amount}/-\nअक्षरी: ${numberToMarathiWords(d.amount)}\nदिनांक: ${dateFormatted}\n\nआपल्या देणगीबद्दल मनःपूर्वक धन्यवाद! 🙏\n\n📱 मंडळाचे ऑनलाईन माहिती पोर्टल उपलब्ध आहे.\n\nपोर्टलवर आपण दररोजचे गणरायाचे फोटो, आरती वेळापत्रक, कार्यक्रम, देणगी माहिती व खर्चाचा पारदर्शक हिशोब पाहू शकता.\n\n🔗 पोर्टल लिंक:\nhttps://ganpati-mandal-zeta.vercel.app/public.html\n\nसर्वांनी पोर्टलला भेट द्यावी व इतरांनाही शेअर करावे.\n\n🙏 श्री वृंदावन मंडळ 🌺`;
+  return `॥ श्री गणेशाय नमः ॥\n\n${currentMandal.name}\n\nदेणगी पावती क्र.: ${receiptNo}\nश्री/श्रीमती: ${d.name}\nरक्कम: ₹${d.amount}/-\nअक्षरी: ${numberToMarathiWords(d.amount)}\nदिनांक: ${dateFormatted}\n\nआपल्या देणगीबद्दल मनःपूर्वक धन्यवाद! 🙏\n\n📱 मंडळाचे ऑनलाईन माहिती पोर्टल उपलब्ध आहे.\n\nपोर्टलवर आपण दररोजचे गणरायाचे फोटो, आरती वेळापत्रक, कार्यक्रम, देणगी माहिती व खर्चाचा पारदर्शक हिशोब पाहू शकता.\n\n🔗 पोर्टल लिंक:\nhttps://ganpati-mandal-zeta.vercel.app/public.html?mandal=${currentMandal.slug}\n\nसर्वांनी पोर्टलला भेट द्यावी व इतरांनाही शेअर करावे.\n\n🙏 ${currentMandal.name} 🌺`;
 }
 
 function getWhatsAppReceiptUrl(d) {
@@ -2303,20 +2362,44 @@ function toast(t) {
   setTimeout(() => el.className = 'toast', 2400);
 }
 
+
+/* Public Portal — load mandal data by ?mandal=slug param */
+async function loadPublicMandalData() {
+  let params = new URLSearchParams(window.location.search);
+  let slug = params.get('mandal');
+  if (!slug || !cloud) return;
+  try {
+    let { data, error } = await cloud.from('mandals').select('id,slug,name,city,contact_phone,nondani_no').eq('slug', slug.toLowerCase()).single();
+    if (error || !data) { console.warn('Public portal: mandal not found for slug', slug); return; }
+    // Temporarily populate sessionStorage so currentMandal works in publicView()
+    sessionStorage.setItem('mandal_id',    data.id);
+    sessionStorage.setItem('mandal_slug',  data.slug);
+    sessionStorage.setItem('mandal_name',  data.name);
+    sessionStorage.setItem('mandal_city',  data.city);
+    sessionStorage.setItem('mandal_phone', data.contact_phone);
+    sessionStorage.setItem('mandal_nondani', data.nondani_no);
+    // Now load this mandal's data from cloud
+    await loadCloud();
+    render();
+  } catch(e) { console.warn('Public portal mandal load error:', e); }
+}
+
 /* Event listeners */
 document.addEventListener('DOMContentLoaded', () => {
   let menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.onclick = () => document.querySelector('.sidebar')?.classList.toggle('open');
   let settingsBtn = document.getElementById('settingsBtn');
-  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note">Financial & Document PIN is secured via SHA-256 hashing in <b>app.js</b>. Live shared data is connected to Supabase.</p><div class="modal-actions"><button class="primary-btn" onclick="requestNotificationPermission()">🔔 Notification Settings</button><button class="outline-btn" onclick="closeModal()">Close</button></div>`);
+  if (settingsBtn) settingsBtn.onclick = () => modal('Settings', `<p class="pin-note"><strong>${currentMandal.name}</strong><br>${currentMandal.city}<br>Nondani: ${currentMandal.nondani}</p><div class="modal-actions"><button class="primary-btn" onclick="window.location.href='settings.html'">⚙️ Mandal Settings</button><button class="outline-btn" onclick="requestNotificationPermission()">🔔 Notifications</button><button class="outline-btn" onclick="logoutMandal()">⏏ Logout</button></div>`);
   let modalEl = document.getElementById('modal');
   if (modalEl) modalEl.onclick = e => { if (e.target.id === 'modal') closeModal(); };
 
-  render();
-  loadCloud();
-  subscribeCloud();
+  if (detectCurrentPage() === 'public' && window.location.search.includes('mandal=')) {
+    loadPublicMandalData();
+  } else {
+    render();
+    loadCloud();
+    subscribeCloud();
+  }
 });
 
-render();
-loadCloud();
-subscribeCloud();
+if (!(detectCurrentPage() === 'public' && window.location.search.includes('mandal='))) { render(); loadCloud(); subscribeCloud(); }

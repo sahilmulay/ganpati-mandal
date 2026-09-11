@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="mr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#9f2e20" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="मंडळ Manager" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="assets/icon.svg" />
+    <title>Login — Ganpati Mandal Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      /* ── Login Page Styles ─────────────────────────────────── */
+      body { background: linear-gradient(135deg, #f9f1e8 0%, #fdf6ed 60%, #f7ebe0 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+      .login-wrap { width: 100%; max-width: 440px; }
+      .login-brand { text-align: center; margin-bottom: 28px; }
+      .login-om { font-size: 52px; line-height: 1; margin-bottom: 8px; filter: drop-shadow(0 2px 8px rgba(159,46,32,0.18)); }
+      .login-brand h1 { font-family: 'Noto Sans Devanagari', sans-serif; font-size: 20px; font-weight: 800; color: #7d1c12; margin: 0 0 4px 0; line-height: 1.3; }
+      .login-brand p  { font-size: 12px; color: #a07060; margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+      .login-card { background: #fff; border-radius: 20px; padding: 32px 28px; box-shadow: 0 8px 40px rgba(159,46,32,0.10), 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #f0ddd0; }
+      .login-tabs { display: flex; gap: 0; margin-bottom: 28px; border-radius: 10px; overflow: hidden; border: 1.5px solid #e8d5c4; }
+      .login-tab  { flex: 1; padding: 10px 0; text-align: center; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s, color 0.2s; background: #fdf8f5; color: #a07060; border: none; font-family: 'Plus Jakarta Sans', sans-serif; }
+      .login-tab.active { background: #9f2e20; color: #fff; }
+      .login-section { display: none; }
+      .login-section.active { display: block; }
+      .login-field { margin-bottom: 18px; }
+      .login-field label { display: block; font-size: 12px; font-weight: 600; color: #7d4030; margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif; text-transform: uppercase; letter-spacing: 0.04em; }
+      .login-field input { width: 100%; padding: 12px 14px; border: 1.5px solid #e0cdc0; border-radius: 10px; font-size: 15px; font-family: 'Plus Jakarta Sans', sans-serif; background: #fdf8f5; color: #3a1a10; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s; outline: none; }
+      .login-field input:focus { border-color: #9f2e20; box-shadow: 0 0 0 3px rgba(159,46,32,0.10); background: #fff; }
+      .login-field .field-hint { font-size: 11px; color: #b08070; margin-top: 4px; font-family: 'Plus Jakarta Sans', sans-serif; }
+      .login-btn { width: 100%; padding: 14px; background: #9f2e20; color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; transition: background 0.18s, transform 0.1s; margin-top: 4px; }
+      .login-btn:hover { background: #7d1c12; }
+      .login-btn:active { transform: scale(0.98); }
+      .login-btn:disabled { background: #c9a090; cursor: not-allowed; }
+      .login-divider { text-align: center; font-size: 12px; color: #b08070; margin: 18px 0; font-family: 'Plus Jakarta Sans', sans-serif; position: relative; }
+      .login-divider::before, .login-divider::after { content: ''; position: absolute; top: 50%; width: 42%; height: 1px; background: #e8d5c4; }
+      .login-divider::before { left: 0; } .login-divider::after { right: 0; }
+      .login-error { background: #fde8e5; border: 1px solid #f5b8b0; color: #8b1c12; padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; display: none; font-family: 'Plus Jakarta Sans', sans-serif; }
+      .login-error.show { display: block; }
+      .login-success { background: #e8f5e9; border: 1px solid #b8dbb9; color: #2e6b30; padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; display: none; font-family: 'Plus Jakarta Sans', sans-serif; }
+      .login-success.show { display: block; }
+      .login-footer { text-align: center; margin-top: 20px; font-size: 11px; color: #c0a090; font-family: 'Plus Jakarta Sans', sans-serif; }
+      .reg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      @media (max-width: 400px) { .reg-row { grid-template-columns: 1fr; } .login-card { padding: 24px 18px; } }
+    </style>
+  </head>
+  <body>
+    <div class="login-wrap">
+      <div class="login-brand">
+        <div class="login-om">🪔</div>
+        <h1>॥ श्री गणेशाय नमः ॥</h1>
+        <p>Ganpati Mandal Manager — Multi-Mandal Portal</p>
+      </div>
+
+      <div class="login-card">
+        <div class="login-tabs">
+          <button class="login-tab active" id="tabLogin" onclick="switchTab('login')">🔑 Login</button>
+          <button class="login-tab" id="tabRegister" onclick="switchTab('register')">📝 New Mandal</button>
+        </div>
+
+        <!-- ── LOGIN SECTION ──────────────────────────────── -->
+        <div class="login-section active" id="sectionLogin">
+          <div class="login-error" id="loginError"></div>
+          <form onsubmit="doLogin(event)">
+            <div class="login-field">
+              <label>Mandal ID (Slug)</label>
+              <input type="text" id="loginSlug" autocomplete="username" placeholder="e.g. vrindavan" autocapitalize="none" autocorrect="off" spellcheck="false" required />
+              <div class="field-hint">Your mandal's unique short name (lowercase)</div>
+            </div>
+            <div class="login-field">
+              <label>Password</label>
+              <input type="password" id="loginPassword" autocomplete="current-password" placeholder="••••••••" required />
+            </div>
+            <button class="login-btn" type="submit" id="loginBtn">Login →</button>
+          </form>
+          <div class="login-divider">Forgot password? Contact the app administrator.</div>
+        </div>
+
+        <!-- ── REGISTER SECTION ───────────────────────────── -->
+        <div class="login-section" id="sectionRegister">
+          <div class="login-error" id="regError"></div>
+          <div class="login-success" id="regSuccess"></div>
+          <form onsubmit="doRegister(event)">
+            <div class="login-field">
+              <label>Mandal Full Name (Marathi)</label>
+              <input type="text" id="regName" placeholder="e.g. वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ" required />
+            </div>
+            <div class="reg-row">
+              <div class="login-field">
+                <label>Mandal ID (Slug)</label>
+                <input type="text" id="regSlug" placeholder="vrindavan" autocapitalize="none" autocorrect="off" spellcheck="false" required oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'')" />
+                <div class="field-hint">Lowercase, no spaces (a–z, 0–9, -)</div>
+              </div>
+              <div class="login-field">
+                <label>City / Village</label>
+                <input type="text" id="regCity" placeholder="Kavlapur, Miraj" required />
+              </div>
+            </div>
+            <div class="reg-row">
+              <div class="login-field">
+                <label>Contact Phone</label>
+                <input type="tel" id="regPhone" placeholder="9876543210" />
+              </div>
+              <div class="login-field">
+                <label>Nondani No (Optional)</label>
+                <input type="text" id="regNondani" placeholder="महा/220/14" />
+              </div>
+            </div>
+            <div class="reg-row">
+              <div class="login-field">
+                <label>Password</label>
+                <input type="password" id="regPassword" placeholder="Min 6 characters" required minlength="6" />
+              </div>
+              <div class="login-field">
+                <label>Confirm Password</label>
+                <input type="password" id="regPassword2" placeholder="Repeat password" required minlength="6" />
+              </div>
+            </div>
+            <div class="login-field">
+              <label>Financial PIN (4 digits)</label>
+              <input type="password" id="regPin" placeholder="4-digit PIN" inputmode="numeric" maxlength="4" pattern="\d{4}" required />
+              <div class="field-hint">Used to access Donations &amp; Expenses sections</div>
+            </div>
+            <button class="login-btn" type="submit" id="regBtn">Register Mandal →</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="login-footer">॥ गणपती बाप्पा मोरया ॥ &nbsp;•&nbsp; Powered by Ganpati Mandal Manager</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const CLOUD_URL = 'https://wrvvnqanjtrmmltoaxvg.supabase.co';
+      const CLOUD_KEY = 'sb_publishable_1isjm1Z4wAtnI0pdzGpmIg_Yc0Q7KSw';
+      const cloud = window.supabase?.createClient(CLOUD_URL, CLOUD_KEY);
+
+      // If already logged in, redirect to dashboard
+      if (sessionStorage.getItem('mandal_id')) {
+        window.location.href = 'dashboard.html';
+      }
+
+      function switchTab(tab) {
+        document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+        document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+        document.getElementById('sectionLogin').classList.toggle('active', tab === 'login');
+        document.getElementById('sectionRegister').classList.toggle('active', tab === 'register');
+      }
+
+      async function sha256(str) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+
+      function showError(id, msg) {
+        let el = document.getElementById(id);
+        el.textContent = msg;
+        el.classList.add('show');
+      }
+      function hideError(id) { document.getElementById(id).classList.remove('show'); }
+      function showSuccess(id, msg) {
+        let el = document.getElementById(id);
+        el.textContent = msg;
+        el.classList.add('show');
+      }
+
+      async function doLogin(e) {
+        e.preventDefault();
+        hideError('loginError');
+        let btn = document.getElementById('loginBtn');
+        btn.disabled = true;
+        btn.textContent = 'Logging in…';
+
+        let slug = document.getElementById('loginSlug').value.trim().toLowerCase();
+        let pass = document.getElementById('loginPassword').value;
+
+        if (!slug || !pass) {
+          showError('loginError', 'Please enter your Mandal ID and password.');
+          btn.disabled = false; btn.textContent = 'Login →'; return;
+        }
+
+        try {
+          let passHash = await sha256(pass);
+          let { data, error } = await cloud.rpc('verify_mandal_login', {
+            p_slug: slug,
+            p_password_hash: passHash
+          });
+
+          if (error || !data) {
+            showError('loginError', '❌ Wrong Mandal ID or password. Please try again.');
+            btn.disabled = false; btn.textContent = 'Login →'; return;
+          }
+
+          // Store mandal session
+          sessionStorage.setItem('mandal_id',       data.id);
+          sessionStorage.setItem('mandal_slug',     data.slug);
+          sessionStorage.setItem('mandal_name',     data.name);
+          sessionStorage.setItem('mandal_city',     data.city);
+          sessionStorage.setItem('mandal_phone',    data.contact_phone);
+          sessionStorage.setItem('mandal_nondani',  data.nondani_no);
+          sessionStorage.setItem('mandal_pin_hash', data.pin_hash);
+          sessionStorage.setItem('mandal_pass_hash', passHash);
+
+          window.location.href = 'dashboard.html';
+        } catch (err) {
+          showError('loginError', 'Connection error. Check your internet and try again.');
+          btn.disabled = false; btn.textContent = 'Login →';
+        }
+      }
+
+      async function doRegister(e) {
+        e.preventDefault();
+        hideError('regError');
+        document.getElementById('regSuccess').classList.remove('show');
+
+        let name     = document.getElementById('regName').value.trim();
+        let slug     = document.getElementById('regSlug').value.trim().toLowerCase();
+        let city     = document.getElementById('regCity').value.trim();
+        let phone    = document.getElementById('regPhone').value.trim();
+        let nondani  = document.getElementById('regNondani').value.trim();
+        let pass1    = document.getElementById('regPassword').value;
+        let pass2    = document.getElementById('regPassword2').value;
+        let pin      = document.getElementById('regPin').value.trim();
+
+        if (pass1 !== pass2) { showError('regError', 'Passwords do not match.'); return; }
+        if (pass1.length < 6) { showError('regError', 'Password must be at least 6 characters.'); return; }
+        if (!/^\d{4}$/.test(pin)) { showError('regError', 'Financial PIN must be exactly 4 digits.'); return; }
+
+        let btn = document.getElementById('regBtn');
+        btn.disabled = true; btn.textContent = 'Registering…';
+
+        try {
+          let passHash = await sha256(pass1);
+          let pinHash  = await sha256(pin);
+
+          let { data, error } = await cloud.rpc('register_mandal', {
+            p_slug:          slug,
+            p_name:          name,
+            p_city:          city,
+            p_contact_phone: phone,
+            p_nondani_no:    nondani,
+            p_password_hash: passHash,
+            p_pin_hash:      pinHash
+          });
+
+          if (error) {
+            showError('regError', 'Registration failed: ' + error.message);
+            btn.disabled = false; btn.textContent = 'Register Mandal →'; return;
+          }
+          if (data && data.error) {
+            showError('regError', '❌ ' + data.error);
+            btn.disabled = false; btn.textContent = 'Register Mandal →'; return;
+          }
+
+          showSuccess('regSuccess', '✅ Mandal registered successfully! You can now login with slug "' + slug + '".');
+          btn.disabled = false; btn.textContent = 'Register Mandal →';
+          // Auto-switch to login tab after 2s
+          setTimeout(() => {
+            document.getElementById('loginSlug').value = slug;
+            switchTab('login');
+          }, 2000);
+
+        } catch (err) {
+          showError('regError', 'Connection error. Check your internet and try again.');
+          btn.disabled = false; btn.textContent = 'Register Mandal →';
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="mr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#9f2e20" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="assets/icon.svg" />
+    <title>Settings — Mandal Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><div class="ganesh-mark">ॐ</div><div><strong id="sidebarMandalName">मंडळ Manager</strong><span>MANAGER</span></div></div>
+        <nav id="nav"></nav>
+        <div class="side-foot"><span class="online-dot"></span> <span id="sidebarSlug"></span></div>
+      </aside>
+      <main class="main-content">
+        <header class="topbar">
+          <button class="menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
+          <div class="location"><span>Settings</span><small>Mandal Profile</small></div>
+          <div class="top-actions"><button class="icon-btn" id="settingsBtn" title="Settings">⚙</button><div class="avatar">⚙</div></div>
+        </header>
+        <div id="page"></div>
+      </main>
+      <div class="mobile-nav" id="mobileNav"></div>
+    </div>
+    <div class="modal-backdrop" id="modal"></div>
+    <div id="toast"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="app.js?v=20260911-5"></script>
+    <script>
+      // Override render for settings page
+      window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('sidebarMandalName').textContent = currentMandal.name;
+        document.getElementById('sidebarSlug').textContent = currentMandal.slug;
+        renderSettingsPage();
+      });
+
+      function renderSettingsPage() {
+        document.getElementById('page').innerHTML = `
+          <div class="page-wrap">
+            <div class="page-heading">
+              <div><h1>⚙️ मंडळ Settings</h1><p>Manage your mandal profile, password, and PIN</p></div>
+            </div>
+
+            <div class="card" style="margin-bottom:16px;">
+              <h3 style="margin:0 0 16px 0; color:#7d1c12; font-size:16px;">📋 Current Mandal Info</h3>
+              <table style="width:100%; border-collapse:collapse; font-size:14px;">
+                <tr><td style="padding:6px 0; color:#a07060; width:120px;">Mandal ID</td><td style="padding:6px 0; font-weight:600;">${escapeHtml(currentMandal.slug)}</td></tr>
+                <tr><td style="padding:6px 0; color:#a07060;">Name</td><td style="padding:6px 0; font-weight:600;">${escapeHtml(currentMandal.name)}</td></tr>
+                <tr><td style="padding:6px 0; color:#a07060;">City</td><td style="padding:6px 0;">${escapeHtml(currentMandal.city)}</td></tr>
+                <tr><td style="padding:6px 0; color:#a07060;">Phone</td><td style="padding:6px 0;">${escapeHtml(currentMandal.phone || '—')}</td></tr>
+                <tr><td style="padding:6px 0; color:#a07060;">Nondani No</td><td style="padding:6px 0;">${escapeHtml(currentMandal.nondani || '—')}</td></tr>
+                <tr><td style="padding:6px 0; color:#a07060;">Public Portal</td><td style="padding:6px 0;"><a href="public.html?mandal=${encodeURIComponent(currentMandal.slug)}" target="_blank" style="color:#9f2e20;">Open Portal ↗</a></td></tr>
+              </table>
+              <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="outline-btn" onclick="openEditDetails()">✏️ Edit Details</button>
+                <button class="outline-btn" onclick="openChangePassword()">🔑 Change Password</button>
+                <button class="outline-btn" onclick="openChangePIN()">🔐 Change Financial PIN</button>
+                <button class="primary-btn" style="background:#dc2626; border-color:#dc2626;" onclick="confirmLogout()">⏏ Logout</button>
+              </div>
+            </div>
+
+            <div class="card" style="margin-bottom:16px;">
+              <h3 style="margin:0 0 12px 0; color:#7d1c12; font-size:16px;">🔔 Notifications</h3>
+              <button class="outline-btn" onclick="requestNotificationPermission()">Enable Push Notifications</button>
+            </div>
+
+            <div class="card">
+              <h3 style="margin:0 0 12px 0; color:#7d1c12; font-size:16px;">📱 Public Portal Link</h3>
+              <p style="font-size:13px; color:#6e584f; margin:0 0 10px 0;">Share this link with devotees to show your mandal's public page:</p>
+              <div style="background:#fdf8f5; border:1px solid #e0cdc0; border-radius:8px; padding:10px 12px; font-size:13px; word-break:break-all; color:#3a1a10;">
+                https://ganpati-mandal-zeta.vercel.app/public.html?mandal=${escapeHtml(currentMandal.slug)}
+              </div>
+              <button class="outline-btn" style="margin-top:10px;" onclick="navigator.clipboard.writeText('https://ganpati-mandal-zeta.vercel.app/public.html?mandal=${currentMandal.slug}'); toast('Link copied!')">📋 Copy Link</button>
+            </div>
+
+            <div class="footer">${escapeHtml(currentMandal.name)} Manager</div>
+          </div>
+        `;
+      }
+
+      function openEditDetails() {
+        modal('Edit Mandal Details', `
+          <form onsubmit="saveDetails(event)">
+            <div class="field"><label>Mandal Name</label><input name="name" type="text" value="${escapeHtml(currentMandal.name)}" required /></div>
+            <div class="field"><label>City / Village</label><input name="city" type="text" value="${escapeHtml(currentMandal.city)}" required /></div>
+            <div class="field"><label>Contact Phone</label><input name="phone" type="tel" value="${escapeHtml(currentMandal.phone)}" /></div>
+            <div class="field"><label>Nondani No</label><input name="nondani" type="text" value="${escapeHtml(currentMandal.nondani)}" /></div>
+            <div class="field"><label>Current Password (required to save)</label><input name="pass" type="password" required placeholder="Your current password" /></div>
+            <div class="modal-actions"><button class="primary-btn" type="submit">Save Changes</button><button class="outline-btn" type="button" onclick="closeModal()">Cancel</button></div>
+          </form>
+        `);
+      }
+
+      async function saveDetails(e) {
+        e.preventDefault();
+        let f = new FormData(e.target);
+        let passHash = await hashPin(f.get('pass'));
+        let { data, error } = await cloud.rpc('update_mandal_settings', {
+          p_mandal_id: currentMandal.id,
+          p_password_hash: passHash,
+          p_name: f.get('name'),
+          p_city: f.get('city'),
+          p_contact_phone: f.get('phone'),
+          p_nondani_no: f.get('nondani'),
+          p_new_pin_hash: null
+        });
+        if (error || (data && data.error)) {
+          toast('❌ ' + ((data && data.error) || error.message)); return;
+        }
+        sessionStorage.setItem('mandal_name', f.get('name'));
+        sessionStorage.setItem('mandal_city', f.get('city'));
+        sessionStorage.setItem('mandal_phone', f.get('phone'));
+        sessionStorage.setItem('mandal_nondani', f.get('nondani'));
+        closeModal();
+        toast('✅ Details updated!');
+        renderSettingsPage();
+      }
+
+      function openChangePassword() {
+        modal('Change Password', `
+          <form onsubmit="savePassword(event)">
+            <div class="field"><label>Current Password</label><input name="old" type="password" required /></div>
+            <div class="field"><label>New Password</label><input name="new1" type="password" required minlength="6" /></div>
+            <div class="field"><label>Confirm New Password</label><input name="new2" type="password" required minlength="6" /></div>
+            <div class="modal-actions"><button class="primary-btn" type="submit">Change Password</button><button class="outline-btn" type="button" onclick="closeModal()">Cancel</button></div>
+          </form>
+        `);
+      }
+
+      async function savePassword(e) {
+        e.preventDefault();
+        let f = new FormData(e.target);
+        if (f.get('new1') !== f.get('new2')) { toast('New passwords do not match.'); return; }
+        let oldHash = await hashPin(f.get('old'));
+        let newHash = await hashPin(f.get('new1'));
+        let { data, error } = await cloud.rpc('change_mandal_password', {
+          p_mandal_id: currentMandal.id,
+          p_old_password_hash: oldHash,
+          p_new_password_hash: newHash
+        });
+        if (error || (data && data.error)) { toast('❌ ' + ((data && data.error) || error.message)); return; }
+        sessionStorage.setItem('mandal_pass_hash', newHash);
+        closeModal();
+        toast('✅ Password changed successfully!');
+      }
+
+      function openChangePIN() {
+        modal('Change Financial PIN', `
+          <form onsubmit="savePIN(event)">
+            <div class="field"><label>Current Password (for verification)</label><input name="pass" type="password" required /></div>
+            <div class="field"><label>New 4-digit PIN</label><input name="pin" type="password" inputmode="numeric" maxlength="4" pattern="\\d{4}" required /></div>
+            <div class="field"><label>Confirm New PIN</label><input name="pin2" type="password" inputmode="numeric" maxlength="4" pattern="\\d{4}" required /></div>
+            <div class="modal-actions"><button class="primary-btn" type="submit">Change PIN</button><button class="outline-btn" type="button" onclick="closeModal()">Cancel</button></div>
+          </form>
+        `);
+      }
+
+      async function savePIN(e) {
+        e.preventDefault();
+        let f = new FormData(e.target);
+        if (f.get('pin') !== f.get('pin2')) { toast('PINs do not match.'); return; }
+        if (!/^\d{4}$/.test(f.get('pin'))) { toast('PIN must be exactly 4 digits.'); return; }
+        let passHash = await hashPin(f.get('pass'));
+        let newPinHash = await hashPin(f.get('pin'));
+        let { data, error } = await cloud.rpc('update_mandal_settings', {
+          p_mandal_id: currentMandal.id,
+          p_password_hash: passHash,
+          p_name: currentMandal.name,
+          p_city: currentMandal.city,
+          p_contact_phone: currentMandal.phone,
+          p_nondani_no: currentMandal.nondani,
+          p_new_pin_hash: newPinHash
+        });
+        if (error || (data && data.error)) { toast('❌ ' + ((data && data.error) || error.message)); return; }
+        sessionStorage.setItem('mandal_pin_hash', newPinHash);
+        closeModal();
+        toast('✅ Financial PIN changed!');
+      }
+
+      function confirmLogout() {
+        modal('Logout', `<p class="delete-text">Are you sure you want to logout from ${escapeHtml(currentMandal.name)}?</p><div class="modal-actions"><button class="outline-btn" onclick="closeModal()">Cancel</button><button class="primary-btn" onclick="logoutMandal()">Logout</button></div>`);
+      }
+    </script>
+  </body>
+</html>
