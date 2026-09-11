@@ -1,6 +1,6 @@
 {
-  "name": "वृंदावन कला क्रीडा व सांस्कृतिक मंडळ Manager",
-  "short_name": "वृंदावन मंडळ",
+  "name": "गणपती मंडळ व्यवस्थापक — Mandal Manager",
+  "short_name": "मंडळ Manager",
   "description": "Ganpati Mandal Management App - Financials, Aarti Timetable, Receipts & Notices",
   "start_url": "./dashboard.html",
   "display": "standalone",

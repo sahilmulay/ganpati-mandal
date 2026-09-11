@@ -13,18 +13,24 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
+    <style>
+      .settings-var-badge { display: inline-block; background: #fbeee7; color: #8b261e; font-size: 11px; font-family: monospace; padding: 2px 6px; border-radius: 4px; margin: 2px; border: 1px solid #f2d4c7; cursor: pointer; }
+      .settings-var-badge:hover { background: #9f2e20; color: #fff; }
+      .settings-grid-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+      @media (max-width: 600px) { .settings-grid-row { grid-template-columns: 1fr; } }
+    </style>
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand"><div class="ganesh-mark">ॐ</div><div><strong id="sidebarMandalName">मंडळ Manager</strong><span>MANAGER</span></div></div>
+        <div class="brand"><div class="ganesh-mark">ॐ</div><div><strong id="sidebarMandalName">मंडळ व्यवस्थापक</strong><span>MANAGER</span></div></div>
         <nav id="nav"></nav>
         <div class="side-foot"><span class="online-dot"></span> <span id="sidebarSlug"></span></div>
       </aside>
       <main class="main-content">
         <header class="topbar">
           <button class="menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
-          <div class="location"><span>Settings</span><small>Mandal Profile</small></div>
+          <div class="location"><span id="topbarMandalName">Settings</span><small id="topbarLocation">Mandal Profile</small></div>
           <div class="top-actions"><button class="icon-btn" id="settingsBtn" title="Settings">⚙</button><div class="avatar">⚙</div></div>
         </header>
         <div id="page"></div>
@@ -35,31 +41,36 @@
     <div id="toast"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="app.js?v=20260911-5"></script>
+    <script src="app.js?v=20260911-6"></script>
     <script>
-      // Override render for settings page
       window.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('sidebarMandalName').textContent = currentMandal.name;
-        document.getElementById('sidebarSlug').textContent = currentMandal.slug;
+        updatePageHeaderAndBrand();
         renderSettingsPage();
       });
 
       function renderSettingsPage() {
+        if (!db.settings) db.settings = { morningAartiTime: '09:00', eveningAartiTime: '20:00', waTemplate: '', waAartiTemplate: '' };
+        let mTime = db.settings.morningAartiTime || '09:00';
+        let eTime = db.settings.eveningAartiTime || '20:00';
+        let waTpl = db.settings.waTemplate || DEFAULT_WA_TEMPLATE;
+        let waAartiTpl = db.settings.waAartiTemplate || DEFAULT_AARTI_WA_TEMPLATE;
+
         document.getElementById('page').innerHTML = `
           <div class="page-wrap">
             <div class="page-heading">
-              <div><h1>⚙️ मंडळ Settings</h1><p>Manage your mandal profile, password, and PIN</p></div>
+              <div><h1>⚙️ मंडळ Settings</h1><p>Manage your mandal profile, aarti times, receipts & WhatsApp messages</p></div>
             </div>
 
+            <!-- 1. MANDAL INFO CARD -->
             <div class="card" style="margin-bottom:16px;">
               <h3 style="margin:0 0 16px 0; color:#7d1c12; font-size:16px;">📋 Current Mandal Info</h3>
               <table style="width:100%; border-collapse:collapse; font-size:14px;">
-                <tr><td style="padding:6px 0; color:#a07060; width:120px;">Mandal ID</td><td style="padding:6px 0; font-weight:600;">${escapeHtml(currentMandal.slug)}</td></tr>
+                <tr><td style="padding:6px 0; color:#a07060; width:130px;">Mandal ID (Slug)</td><td style="padding:6px 0; font-weight:600;">${escapeHtml(currentMandal.slug)}</td></tr>
                 <tr><td style="padding:6px 0; color:#a07060;">Name</td><td style="padding:6px 0; font-weight:600;">${escapeHtml(currentMandal.name)}</td></tr>
-                <tr><td style="padding:6px 0; color:#a07060;">City</td><td style="padding:6px 0;">${escapeHtml(currentMandal.city)}</td></tr>
+                <tr><td style="padding:6px 0; color:#a07060;">City / Village</td><td style="padding:6px 0;">${escapeHtml(currentMandal.city)}</td></tr>
                 <tr><td style="padding:6px 0; color:#a07060;">Phone</td><td style="padding:6px 0;">${escapeHtml(currentMandal.phone || '—')}</td></tr>
                 <tr><td style="padding:6px 0; color:#a07060;">Nondani No</td><td style="padding:6px 0;">${escapeHtml(currentMandal.nondani || '—')}</td></tr>
-                <tr><td style="padding:6px 0; color:#a07060;">Public Portal</td><td style="padding:6px 0;"><a href="public.html?mandal=${encodeURIComponent(currentMandal.slug)}" target="_blank" style="color:#9f2e20;">Open Portal ↗</a></td></tr>
+                <tr><td style="padding:6px 0; color:#a07060;">Public Portal</td><td style="padding:6px 0;"><a href="public.html?mandal=${encodeURIComponent(currentMandal.slug)}" target="_blank" style="color:#9f2e20; font-weight:600;">Open Portal ↗</a></td></tr>
               </table>
               <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
                 <button class="outline-btn" onclick="openEditDetails()">✏️ Edit Details</button>
@@ -69,18 +80,97 @@
               </div>
             </div>
 
+            <!-- 2. AARTI TIMETABLE SETTINGS CARD -->
+            <div class="card" style="margin-bottom:16px;">
+              <h3 style="margin:0 0 12px 0; color:#7d1c12; font-size:16px;">🪔 Aarti Timetable Times (आरती वेळा)</h3>
+              <p style="font-size:13px; color:#6e584f; margin:0 0 14px 0;">येथे बदललेल्या वेळा आरती वेळापत्रक, पावती व व्हॉट्सॲप मेसेजमध्ये आपोआप दिसतील.</p>
+              <div class="settings-grid-row">
+                <div class="field">
+                  <label>🌅 सकाळची महाआरती वेळ (Morning Aarti Time)</label>
+                  <input type="time" id="morningAartiInput" value="${escapeHtml(mTime)}" style="font-size:16px; font-weight:600;">
+                </div>
+                <div class="field">
+                  <label>🌆 सायंकाळची महाआरती वेळ (Evening Aarti Time)</label>
+                  <input type="time" id="eveningAartiInput" value="${escapeHtml(eTime)}" style="font-size:16px; font-weight:600;">
+                </div>
+              </div>
+              <button class="primary-btn" onclick="saveAartiTimes()">💾 Save Aarti Times (आरती वेळ जतन करा)</button>
+            </div>
+
+            <!-- 3. DIGITAL RECEIPT (PAVATI) PREVIEW -->
+            <div class="card" style="margin-bottom:16px;">
+              <h3 style="margin:0 0 12px 0; color:#7d1c12; font-size:16px;">🧾 Digital Donation Receipt (पावती)</h3>
+              <p style="font-size:13px; color:#6e584f; margin:0 0 14px 0;">
+                आपल्या मंडळाची अधिकृत डिजिटल पावती आपल्या मंडळाच्या नावासह आणि नोंदणी क्रमांकासह तयार होते.
+              </p>
+              <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <button class="outline-btn" onclick="previewSampleReceipt()">👁️ Preview My Mandal Receipt (पावती पूर्वावलोकन)</button>
+              </div>
+            </div>
+
+            <!-- 4. WHATSAPP MESSAGES CUSTOMIZATION CARD -->
+            <div class="card" style="margin-bottom:16px;">
+              <h3 style="margin:0 0 12px 0; color:#7d1c12; font-size:16px;">💬 WhatsApp Messages Customization (व्हॉट्सॲप संदेश)</h3>
+              <p style="font-size:13px; color:#6e584f; margin:0 0 16px 0;">
+                आपल्या आवडीनुसार व्हॉट्सॲप संदेश मजकूर बदलू शकता. कंसामधील चल (variables) जसे आहे तसेच ठेवा.
+              </p>
+
+              <!-- Donation Receipt WA Message -->
+              <div style="margin-bottom:20px;">
+                <label style="font-weight:700; color:#7d1c12; font-size:13px; display:block; margin-bottom:6px;">
+                  📜 देणगी पावती व्हॉट्सॲप संदेश (Donation Receipt WhatsApp Message):
+                </label>
+                <div style="margin-bottom:6px;">
+                  <span style="font-size:11px; color:#7d4030;">Variables:</span>
+                  <span class="settings-var-badge" onclick="insertVar('waDonationTpl','{mandal_name}')">{mandal_name}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waDonationTpl','{name}')">{name}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waDonationTpl','{amount}')">{amount}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waDonationTpl','{amount_words}')">{amount_words}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waDonationTpl','{receipt_no}')">{receipt_no}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waDonationTpl','{date}')">{date}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waDonationTpl','{mandal_slug}')">{mandal_slug}</span>
+                </div>
+                <textarea id="waDonationTpl" rows="9" style="width:100%; padding:10px 12px; border:1.5px solid #e0cdc0; border-radius:10px; font-family:inherit; font-size:13px; line-height:1.5; box-sizing:border-box;">${escapeHtml(waTpl)}</textarea>
+              </div>
+
+              <!-- Aarti Announcement WA Message -->
+              <div style="margin-bottom:20px;">
+                <label style="font-weight:700; color:#7d1c12; font-size:13px; display:block; margin-bottom:6px;">
+                  🪔 आरती घोषणा व्हॉट्सॲप संदेश (Aarti Announcement WhatsApp Message):
+                </label>
+                <div style="margin-bottom:6px;">
+                  <span style="font-size:11px; color:#7d4030;">Variables:</span>
+                  <span class="settings-var-badge" onclick="insertVar('waAartiTpl','{mandal_name}')">{mandal_name}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waAartiTpl','{header_date}')">{header_date}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waAartiTpl','{time_text}')">{time_text}</span>
+                  <span class="settings-var-badge" onclick="insertVar('waAartiTpl','{people}')">{people}</span>
+                </div>
+                <textarea id="waAartiTpl" rows="7" style="width:100%; padding:10px 12px; border:1.5px solid #e0cdc0; border-radius:10px; font-family:inherit; font-size:13px; line-height:1.5; box-sizing:border-box;">${escapeHtml(waAartiTpl)}</textarea>
+              </div>
+
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="primary-btn" onclick="saveWaTemplates()">💾 Save WhatsApp Templates (संदेश जतन करा)</button>
+                <button class="outline-btn" onclick="resetWaTemplates()">↺ Reset to Default (मूळ संदेश पूर्ववत करा)</button>
+              </div>
+            </div>
+
+            <!-- 5. NOTIFICATIONS CARD -->
             <div class="card" style="margin-bottom:16px;">
               <h3 style="margin:0 0 12px 0; color:#7d1c12; font-size:16px;">🔔 Notifications</h3>
               <button class="outline-btn" onclick="requestNotificationPermission()">Enable Push Notifications</button>
             </div>
 
+            <!-- 6. PUBLIC PORTAL LINK CARD -->
             <div class="card">
               <h3 style="margin:0 0 12px 0; color:#7d1c12; font-size:16px;">📱 Public Portal Link</h3>
               <p style="font-size:13px; color:#6e584f; margin:0 0 10px 0;">Share this link with devotees to show your mandal's public page:</p>
               <div style="background:#fdf8f5; border:1px solid #e0cdc0; border-radius:8px; padding:10px 12px; font-size:13px; word-break:break-all; color:#3a1a10;">
                 https://ganpati-mandal-zeta.vercel.app/public.html?mandal=${escapeHtml(currentMandal.slug)}
               </div>
-              <button class="outline-btn" style="margin-top:10px;" onclick="navigator.clipboard.writeText('https://ganpati-mandal-zeta.vercel.app/public.html?mandal=${currentMandal.slug}'); toast('Link copied!')">📋 Copy Link</button>
+              <div style="margin-top:10px; display:flex; gap:10px;">
+                <button class="outline-btn" onclick="navigator.clipboard.writeText('https://ganpati-mandal-zeta.vercel.app/public.html?mandal=${currentMandal.slug}'); toast('Link copied!')">📋 Copy Link</button>
+                <a class="primary-btn" href="public.html?mandal=${encodeURIComponent(currentMandal.slug)}" target="_blank" style="text-decoration:none; display:inline-block;">Open Portal ↗</a>
+              </div>
             </div>
 
             <div class="footer">${escapeHtml(currentMandal.name)} Manager</div>
@@ -88,10 +178,67 @@
         `;
       }
 
+      function insertVar(textareaId, varStr) {
+        let ta = document.getElementById(textareaId);
+        if (!ta) return;
+        let start = ta.selectionStart, end = ta.selectionEnd;
+        ta.value = ta.value.substring(0, start) + varStr + ta.value.substring(end);
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = start + varStr.length;
+      }
+
+      function saveAartiTimes() {
+        let m = document.getElementById('morningAartiInput').value || '09:00';
+        let e = document.getElementById('eveningAartiInput').value || '20:00';
+        if (!db.settings) db.settings = {};
+        db.settings.morningAartiTime = m;
+        db.settings.eveningAartiTime = e;
+        save();
+        toast('✅ Aarti times saved successfully! (आरती वेळा जतन केल्या)');
+      }
+
+      function saveWaTemplates() {
+        let d = document.getElementById('waDonationTpl').value.trim();
+        let a = document.getElementById('waAartiTpl').value.trim();
+        if (!db.settings) db.settings = {};
+        db.settings.waTemplate = d;
+        db.settings.waAartiTemplate = a;
+        save();
+        toast('✅ WhatsApp templates saved! (व्हॉट्सॲप टेम्पलेट जतन केले)');
+      }
+
+      function resetWaTemplates() {
+        if (!db.settings) db.settings = {};
+        db.settings.waTemplate = '';
+        db.settings.waAartiTemplate = '';
+        save();
+        document.getElementById('waDonationTpl').value = DEFAULT_WA_TEMPLATE;
+        document.getElementById('waAartiTpl').value = DEFAULT_AARTI_WA_TEMPLATE;
+        toast('↺ Reset to default templates! (मूळ टेम्पलेट पूर्ववत केले)');
+      }
+
+      async function previewSampleReceipt() {
+        let sample = {
+          id: 'test-001',
+          name: 'देणगीदार भक्त (Sample Donor)',
+          amount: 1001,
+          mode: 'UPI',
+          date: today
+        };
+        openReceiptModal(sample.id);
+        // If sample is not in db.donations, fake it temporarily
+        let origDonations = db.donations;
+        if (!db.donations.find(x => x.id === sample.id)) {
+          db.donations.push(sample);
+          await openReceiptModal(sample.id);
+          db.donations = db.donations.filter(x => x.id !== sample.id);
+        }
+      }
+
       function openEditDetails() {
         modal('Edit Mandal Details', `
           <form onsubmit="saveDetails(event)">
-            <div class="field"><label>Mandal Name</label><input name="name" type="text" value="${escapeHtml(currentMandal.name)}" required /></div>
+            <div class="field"><label>Mandal Name (Marathi)</label><input name="name" type="text" value="${escapeHtml(currentMandal.name)}" required /></div>
             <div class="field"><label>City / Village</label><input name="city" type="text" value="${escapeHtml(currentMandal.city)}" required /></div>
             <div class="field"><label>Contact Phone</label><input name="phone" type="tel" value="${escapeHtml(currentMandal.phone)}" /></div>
             <div class="field"><label>Nondani No</label><input name="nondani" type="text" value="${escapeHtml(currentMandal.nondani)}" /></div>
@@ -123,6 +270,7 @@
         sessionStorage.setItem('mandal_nondani', f.get('nondani'));
         closeModal();
         toast('✅ Details updated!');
+        updatePageHeaderAndBrand();
         renderSettingsPage();
       }
 

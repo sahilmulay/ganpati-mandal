@@ -66,7 +66,7 @@ async function requestNotificationPermission() {
       toast('🔔 Notifications enabled successfully!');
       sendLocalNotification(
         '॥ श्री गणेशाय नमः ॥',
-        'वृंदावन मंडळ नोटिफिकेशन्स सक्रिय झाले आहेत. आरती व महत्वाच्या सूचना मिळतील.'
+        `${currentMandal.name} नोटिफिकेशन्स सक्रिय झाले आहेत. आरती व महत्वाच्या सूचना मिळतील.`
       );
       render();
     } else {
@@ -227,87 +227,21 @@ const FESTIVAL_DATES = [
 
 const seed = {
   donations: [],
-  expenses: [
-    { id: 'exp1', description: 'फ्लोटर सँड (2 गाडी)', amount: 3000, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp2', description: '6" विट (150 नग)', amount: 2500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp3', description: 'सिमेंट (10 पोती)', amount: 3400, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp4', description: 'वाळू (1 गाडी)', amount: 1000, category: 'Other', paidBy: 'मंडळ', date: '2026-08-20', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp5', description: 'वाळू (30 पाटी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-22', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp6', description: '6" विट (150 नग)', amount: 2500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-22', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp7', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-23', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp8', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-24', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp9', description: 'सिमेंट (6 पोती)', amount: 2040, category: 'Other', paidBy: 'मंडळ', date: '2026-08-24', image: 'assets/mandap_bill_page1.jpg' },
-    { id: 'exp10', description: 'खडी (1 गाडी)', amount: 1000, category: 'Other', paidBy: 'मंडळ', date: '2026-08-25', image: 'assets/mandap_bill_page2.jpg' },
-    { id: 'exp11', description: 'फ्लोटर सँड (1 गाडी)', amount: 1500, category: 'Other', paidBy: 'मंडळ', date: '2026-08-25', image: 'assets/mandap_bill_page2.jpg' },
-    { id: 'exp12', description: 'सिमेंट (3 पोती)', amount: 1020, category: 'Other', paidBy: 'मंडळ', date: '2026-08-25', image: 'assets/mandap_bill_page2.jpg' }
-  ],
+  expenses: [],
   aartis: [],
   events: [],
-  contacts: [
-    { id: 'c1', name: 'संजय जाधव', role: 'अध्यक्ष (President)', phone: '9876543210' },
-    { id: 'c2', name: 'महेश मोरे', role: 'सचिव / सेक्रेटरी (Secretary)', phone: '9876543211' },
-    { id: 'c3', name: 'अनिता पाटील', role: 'खजिनदार (Treasurer)', phone: '9876543212' },
-    { id: 'c4', name: 'ऋषिकेश जाधव', role: 'कार्यकारी सदस्य (Committee Member)', phone: '9876543213' }
-  ],
+  contacts: [],
   alankar: [],
-  documents: [
-    {
-      id: 'doc1',
-      title: 'पोलीस ठाणे मंडप व ध्वनीक्षेप परवानगी',
-      category: 'Police Permission',
-      icon: '🚓',
-      outwardNo: 'जावक क्र. पोठा/मिरज/गणेश/२०२६/४५',
-      issuedBy: 'मिरज ग्रामीण पोलीस ठाणे',
-      validFrom: '2026-08-19',
-      validUntil: '2026-08-30',
-      status: 'Approved',
-      image: '',
-      note: 'रात्री १०:०० वाजेपर्यंत ध्वनीक्षेपक व मंडप कायदेशीर परवानगी मंजूर.'
-    },
-    {
-      id: 'doc2',
-      title: 'ग्रामपंचायत नाहरकत दाखला (NOC)',
-      category: 'Gram Panchayat NOC',
-      icon: '🏛️',
-      outwardNo: 'जा.क्र. ग्रा.पं./कवलापूर/२०२६/११२',
-      issuedBy: 'ग्रामपंचायत कवलापूर',
-      validFrom: '2026-08-15',
-      validUntil: '2026-08-31',
-      status: 'Approved',
-      image: '',
-      note: '६ रेणूका नगर, कवलापूर येथील सार्वजनिक जागेत मंडप उभारणीस नाहरकत.'
-    },
-    {
-      id: 'doc3',
-      title: 'महावितरण तात्पुरती वीज जोडणी परवानगी',
-      category: 'MSEDCL Electricity',
-      icon: '⚡',
-      outwardNo: 'MSEDCL/SANGLI/TEMP/8921',
-      issuedBy: 'महावितरण सांगली उपविभाग',
-      validFrom: '2026-08-18',
-      validUntil: '2026-08-30',
-      status: 'Approved',
-      image: '',
-      note: 'मंडप व रोषणाईसाठी तात्पुरता सिंगल फेज अधिकृत वीज पुरवठा.'
-    },
-    {
-      id: 'doc4',
-      title: 'मंडळ अधिकृत नोंदणी प्रमाणपत्र',
-      category: 'Trust Registration',
-      icon: '📜',
-      outwardNo: 'नोंदणी क्र. महा/२२०/१४',
-      issuedBy: 'सहाय्यक धर्मादाय आयुक्त, सांगली',
-      validFrom: '2014-06-12',
-      validUntil: 'कायमस्वरूपी',
-      status: 'Approved',
-      image: '',
-      note: 'वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ, कवलापूर अधिकृत नोंदणीकृत संस्था.'
-    }
-  ]
+  documents: [],
+  settings: {
+    morningAartiTime: '09:00',
+    eveningAartiTime: '20:00',
+    waTemplate: ''
+  }
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v9';
+const DATA_VERSION = '2026-mandal-prod-v11';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -315,14 +249,18 @@ if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('manda
 }
 
 let db = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || 'null') || seed;
-if (!db.alankar) db.alankar = seed.alankar;
-if (!db.documents) db.documents = seed.documents;
+if (!db.alankar) db.alankar = [];
+if (!db.documents) db.documents = [];
 if (!db.donations) db.donations = [];
-if (!db.expenses || !db.expenses.length) db.expenses = seed.expenses;
+if (!db.expenses) db.expenses = [];
 if (!db.aartis) db.aartis = [];
 if (!db.events) db.events = [];
-if (!db.contacts || !db.contacts.length) db.contacts = seed.contacts;
-db.aartis.forEach(a => a.time = a.type === 'Morning' ? '09:00' : '20:00');
+if (!db.contacts) db.contacts = [];
+// Aarti times are per-record and configurable; not forced-overridden.
+if (!db.settings) db.settings = seed.settings;
+if (!db.settings.morningAartiTime) db.settings.morningAartiTime = '09:00';
+if (!db.settings.eveningAartiTime) db.settings.eveningAartiTime = '20:00';
+if (db.settings.waTemplate === undefined) db.settings.waTemplate = '';
 if (Array.isArray(db.expenses)) {
   db.expenses.forEach(e => {
     if (!hasValidImage(e.image)) e.image = '';
@@ -485,7 +423,7 @@ async function loadCloud() {
         console.warn(`Supabase ${type} fetch error:`, error.message);
         return;
       }
-      if (Array.isArray(data) && data.length) {
+      if (Array.isArray(data)) {
         db[listName[type]] = data.map(row => fromCloud(type, row));
         updatedAny = true;
       }
@@ -534,9 +472,25 @@ const nav = [
   ['documents.html', 'documents', '📁', 'Official Documents'],
   ['contacts.html', 'contacts', '☏', 'Committee Contacts'],
   ['reports.html', 'reports', '▥', 'Reports'],
-  ['public.html', 'public', '🌺', 'Public Portal'],
+  ['public.html?mandal=' + currentMandal.slug, 'public', '🌺', 'Public Portal'],
   ['settings.html', 'settings', '⚙', 'Settings']
 ];
+
+
+/* Update dynamic mandal name, location, and page title on all pages */
+function updatePageHeaderAndBrand() {
+  let name = currentMandal.name || 'मंडळ व्यवस्थापक';
+  let city = currentMandal.city || '';
+  let slug = currentMandal.slug || '';
+
+  document.querySelectorAll('.brand strong, #sidebarMandalName').forEach(el => el.textContent = name);
+  document.querySelectorAll('.location span, #topbarMandalName').forEach(el => el.textContent = name);
+  document.querySelectorAll('.location small, #topbarLocation').forEach(el => el.textContent = (city ? city + ' • ' : '') + 'Private Portal');
+  document.querySelectorAll('.side-foot').forEach(el => el.innerHTML = '<span class="online-dot"></span> ' + escapeHtml(slug));
+  if (detectCurrentPage() !== 'public') {
+    document.title = name + ' - Manager';
+  }
+}
 
 function renderNav() {
   let activeId = detectCurrentPage();
@@ -571,6 +525,7 @@ function shell(title, sub, body, action = '') {
 
 function render() {
   pageName = detectCurrentPage();
+  updatePageHeaderAndBrand();
   if (pageName === 'public') {
     let target = document.getElementById('page');
     if (target) target.innerHTML = publicView();
@@ -791,7 +746,7 @@ function publicView() {
   let sortedDonations = sortByNewest(db.donations);
   let sortedExpenses = sortByNewest(db.expenses);
   let upcomingEvents = sortEventsChronological(db.events).slice(0, 6);
-  let contactsList = db.contacts && db.contacts.length ? db.contacts : seed.contacts;
+  let contactsList = db.contacts && db.contacts.length ? db.contacts : [];
 
   let galleryHtml = alankars.length ? alankars.map(item => `
     <div class="alankar-card" onclick="openBill('${item.image}')">
@@ -846,11 +801,11 @@ function publicView() {
         </div>
         <div style="padding:8px 14px; font-size:12px;">
           <div style="margin-bottom:6px;">
-            <span style="color:#8b261e; font-weight:700;">🌅 सकाळ (९:०० AM):</span>
+            <span style="color:#8b261e; font-weight:700;">🌅 सकाळ (${time12(db.settings?.morningAartiTime || '09:00')}):</span>
             ${morningAartis.length ? morningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध</span>'}
           </div>
           <div>
-            <span style="color:#8b261e; font-weight:700;">🌆 सायंकाळ (८:०० PM):</span>
+            <span style="color:#8b261e; font-weight:700;">🌆 सायंकाळ (${time12(db.settings?.eveningAartiTime || '20:00')}):</span>
             ${eveningAartis.length ? eveningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध</span>'}
           </div>
         </div>
@@ -863,8 +818,8 @@ function publicView() {
       <!-- Public Header Banner -->
       <div class="public-header">
         <div style="font-size:30px; margin-bottom:2px;">॥ श्री गणेशाय नमः ॥</div>
-        <h1>वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h1>
-        <p style="margin:4px 0 10px 0; opacity:0.9; font-size:12px;">६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <b>नोंदणी क्र. महा/२२०/१४</b></p>
+        <h1>${currentMandal.name}</h1>
+        <p style="margin:4px 0 10px 0; opacity:0.9; font-size:12px;">${currentMandal.city}${currentMandal.nondani ? ' | <b>नोंदणी क्र. ' + currentMandal.nondani + '</b>' : ''}</p>
         <span class="public-header-badge">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
       </div>
 
@@ -958,7 +913,7 @@ function publicView() {
               </div>
               <div class="contact-btn-group">
                 <a href="tel:${escapeHtml(c.phone)}" class="btn-call">📞 Call</a>
-                <a href="https://api.whatsapp.com/send?phone=91${(c.phone || '').replace(/\D/g, '')}&text=${encodeURIComponent('॥ श्री गणेशाय नमः ॥ नमस्कार, वृंदावन मंडळ संदर्भात संपर्क करत आहे.')}" target="_blank" class="btn-wa">💬 WhatsApp</a>
+                <a href="https://api.whatsapp.com/send?phone=91${(c.phone || '').replace(/\D/g, '')}&text=${encodeURIComponent('॥ श्री गणेशाय नमः ॥ नमस्कार, ' + currentMandal.name + ' संदर्भात संपर्क करत आहे.')}" target="_blank" class="btn-wa">💬 WhatsApp</a>
               </div>
             </div>
           `).join('')}
@@ -966,7 +921,7 @@ function publicView() {
       </div>
 
       <div style="text-align:center; padding:16px; color:#6b7280; font-size:11px; border-top:1px solid #e5e7eb;">
-        🙏 <b>वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</b> परिवार | सर्व हक्क सुरक्षित 🙏
+        🙏 <b>${currentMandal.name}</b> परिवार | सर्व हक्क सुरक्षित 🙏
       </div>
     </div>
   `;
@@ -1017,7 +972,7 @@ function dashboard() {
   ` : '';
 
   return shell(
-    'नमस्कार, वृंदावन कला क्रीडा व सांस्कृतिक मंडळ परिवार!',
+    'नमस्कार, ' + currentMandal.name + ' परिवार!',
     'आजची माहिती आणि झटपट कामे',
     `${notifBanner}
     <section class="welcome">
@@ -1363,7 +1318,7 @@ function aarti() {
           ${(aartiFilter === 'all' || aartiFilter === 'Morning') ? `
             <div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed #f0e2d5;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:12px; font-weight:700; color:#8b261e;">🌅 सकाळची महाआरती (९:०० AM):</span>
+                <span style="font-size:12px; font-weight:700; color:#8b261e;">🌅 सकाळची महाआरती (${time12(db.settings?.morningAartiTime || '09:00')}):</span>
                 <span class="tag morning">Morning</span>
               </div>
               ${morningAartis.length ? morningAartis.map(a => `
@@ -1390,7 +1345,7 @@ function aarti() {
           ${(aartiFilter === 'all' || aartiFilter === 'Evening') ? `
             <div>
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:12px; font-weight:700; color:#8b261e;">🌆 सायंकाळची महाआरती (८:०० PM):</span>
+                <span style="font-size:12px; font-weight:700; color:#8b261e;">🌆 सायंकाळची महाआरती (${time12(db.settings?.eveningAartiTime || '20:00')}):</span>
                 <span class="tag evening">Evening</span>
               </div>
               ${eveningAartis.length ? eveningAartis.map(a => `
@@ -1603,7 +1558,7 @@ function openAuditReportBundle() {
     <html lang="mr">
     <head>
       <meta charset="UTF-8">
-      <title>वार्षिक जमा-खर्च हिशोब - वृंदावन कला क्रीडा व सांस्कृतिक मंडळ</title>
+      <title>वार्षिक जमा-खर्च हिशोब - ${currentMandal.name}</title>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700;800&display=swap" rel="stylesheet">
       <style>
         body { font-family: 'Noto Sans Devanagari', sans-serif; margin: 30px; color: #1f2937; background: #fff; line-height: 1.5; }
@@ -1627,14 +1582,14 @@ function openAuditReportBundle() {
     </head>
     <body>
       <div class="print-bar">
-        <span><b>📦 वृंदावन मंडळ - वार्षिक हिशोब अहवाल (Audit Report Bundle)</b></span>
+        <span><b>📦 ${currentMandal.name} - वार्षिक हिशोब अहवाल (Audit Report Bundle)</b></span>
         <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
       </div>
 
       <div class="header">
         <h1>॥ श्री गणेशाय नमः ॥</h1>
-        <h2 style="margin:6px 0; color:#941838;">वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ</h2>
-        <p>६ रेणूका नगर, कवलापूर, ता. मिरज, जि. सांगली | <span class="reg-no">नोंदणी क्र. महा/२२०/१४</span></p>
+        <h2 style="margin:6px 0; color:#941838;">${currentMandal.name}</h2>
+        <p>${currentMandal.city}${currentMandal.nondani ? ' | <span class=\"reg-no\">नोंदणी क्र. ' + currentMandal.nondani + '</span>' : ''}</p>
         <p><b>वार्षिक जमा-खर्च व हिशोब अहवाल (Audit Summary Report)</b> — दिनांक: ${dateLabelInMarathi(today)}</p>
       </div>
 
@@ -1771,10 +1726,13 @@ function openForm(type, item = null) {
         </select>
       </div>
       <div class="field"><label>आरती सत्र (Session)</label>
-        <select name="type">
-          <option value="Morning" ${x.type === 'Morning' ? 'selected' : ''}>🌅 सकाळची महाआरती (९:०० AM)</option>
-          <option value="Evening" ${x.type === 'Evening' ? 'selected' : ''}>🌆 सायंकाळची महाआरती (८:०० PM)</option>
+        <select name="type" onchange="let tf=this.form.querySelector('input[name=time]'); if(tf){ tf.value = this.value==='Morning' ? (db.settings?.morningAartiTime || '09:00') : (db.settings?.eveningAartiTime || '20:00'); }">
+          <option value="Morning" ${x.type === 'Morning' ? 'selected' : ''}>🌅 सकाळची महाआरती (${time12(db.settings?.morningAartiTime || '09:00')})</option>
+          <option value="Evening" ${x.type === 'Evening' ? 'selected' : ''}>🌆 सायंकाळची महाआरती (${time12(db.settings?.eveningAartiTime || '20:00')})</option>
         </select>
+      </div>
+      <div class="field"><label>आरती वेळ (Time)</label>
+        <input name="time" type="time" value="${x.time || (x.type === 'Evening' ? (db.settings?.eveningAartiTime || '20:00') : (db.settings?.morningAartiTime || '09:00'))}">
       </div>
       <div class="field full"><label>टीप (Optional Note)</label><textarea name="note" placeholder="काही विशेष नोंद असल्यास…">${escapeHtml(x.note || '')}</textarea></div>
     `,
@@ -1856,7 +1814,7 @@ async function submitForm(ev, type, id) {
     }
   }
 
-  if (type === 'aarti') o.time = o.type === 'Morning' ? '09:00' : '20:00';
+  if (type === 'aarti') { if (!o.time) { o.time = o.type === 'Morning' ? (db.settings?.morningAartiTime || '09:00') : (db.settings?.eveningAartiTime || '20:00'); } }
   if (['donation', 'expense'].includes(type)) o.amount = Number(o.amount);
   
   let file = f.get('image');
@@ -2060,8 +2018,139 @@ function openBill(image) {
   `);
 }
 
+
+/* Generic Canvas Receipt — for mandals without a physical receipt template */
+function generateGenericReceiptCanvas(d) {
+  return new Promise((resolve) => {
+    try {
+      let canvas = document.createElement('canvas');
+      canvas.width = 900;
+      canvas.height = 520;
+      let ctx = canvas.getContext('2d');
+
+      // Background
+      ctx.fillStyle = '#fffaf5';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Outer border (double)
+      ctx.strokeStyle = '#9f2e20';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+      ctx.lineWidth = 2;
+      ctx.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
+
+      // Corner decorations
+      let corners = [[30,30],[canvas.width-30,30],[30,canvas.height-30],[canvas.width-30,canvas.height-30]];
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillStyle = '#9f2e20';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      corners.forEach(([x,y]) => ctx.fillText('✿', x, y));
+
+      // Header OM
+      ctx.font = 'bold 32px "Noto Sans Devanagari", sans-serif';
+      ctx.fillStyle = '#9f2e20';
+      ctx.textAlign = 'center';
+      ctx.fillText('॥ श्री गणेशाय नमः ॥', canvas.width / 2, 68);
+
+      // Mandal Name
+      ctx.font = 'bold 26px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(currentMandal.name, canvas.width / 2, 110);
+
+      // City + Nondani
+      ctx.font = '16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillStyle = '#6b2a1a';
+      let cityNondani = currentMandal.city + (currentMandal.nondani ? ' | नोंदणी क्र. ' + currentMandal.nondani : '');
+      ctx.fillText(cityNondani, canvas.width / 2, 136);
+
+      // Divider line
+      ctx.strokeStyle = '#9f2e20';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(40, 150); ctx.lineTo(canvas.width - 40, 150);
+      ctx.stroke();
+
+      // Title: देणगी पावती
+      ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
+      ctx.fillStyle = '#9f2e20';
+      ctx.textAlign = 'center';
+      ctx.fillText('देणगी पावती', canvas.width / 2, 178);
+
+      // Receipt details — left-aligned
+      ctx.textAlign = 'left';
+      ctx.font = '18px "Noto Sans Devanagari", sans-serif';
+      ctx.fillStyle = '#2c1b18';
+      let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '00001';
+      let dateFormatted = d.date ? d.date.split('-').reverse().join('-') : today;
+      let lx = 80, rx = 500, lineH = 40;
+      let startY = 220;
+
+      let fields = [
+        ['पावती क्र.', receiptNo, 'दिनांक', dateFormatted],
+        ['श्री/श्रीमती', d.name || '', '', ''],
+        ['रक्कम', '₹' + (d.amount || 0) + '/-', 'प्रकार', d.mode || ''],
+        ['अक्षरी', numberToMarathiWords(d.amount || 0), '', ''],
+      ];
+
+      fields.forEach((row, i) => {
+        let y = startY + i * lineH;
+        ctx.font = 'bold 15px "Noto Sans Devanagari", sans-serif';
+        ctx.fillStyle = '#9f2e20';
+        ctx.fillText(row[0] + ':', lx, y);
+        ctx.font = 'bold 17px "Noto Sans Devanagari", sans-serif';
+        ctx.fillStyle = '#1a0a08';
+        ctx.fillText(row[1], lx + 130, y);
+        if (row[2]) {
+          ctx.font = 'bold 15px "Noto Sans Devanagari", sans-serif';
+          ctx.fillStyle = '#9f2e20';
+          ctx.fillText(row[2] + ':', rx, y);
+          ctx.font = 'bold 17px "Noto Sans Devanagari", sans-serif';
+          ctx.fillStyle = '#1a0a08';
+          ctx.fillText(row[3], rx + 110, y);
+        }
+      });
+
+      // Bottom divider
+      ctx.strokeStyle = '#9f2e20';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(40, 390); ctx.lineTo(canvas.width - 40, 390);
+      ctx.stroke();
+
+      // Thank you
+      ctx.font = '16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillStyle = '#7d1c12';
+      ctx.textAlign = 'center';
+      ctx.fillText('आपल्या देणगीबद्दल मनःपूर्वक धन्यवाद! 🙏', canvas.width / 2, 418);
+      ctx.font = 'bold 14px "Noto Sans Devanagari", sans-serif';
+      ctx.fillStyle = '#a07060';
+      ctx.fillText('( मंडळाचे अधिकृत डिजिटल पावती / Official Digital Receipt )', canvas.width / 2, 445);
+
+      // Bottom signature area
+      ctx.font = '13px "Noto Sans Devanagari", sans-serif';
+      ctx.fillStyle = '#9f2e20';
+      ctx.textAlign = 'left';
+      ctx.fillText('सही / Signature:', 80, 490);
+      ctx.strokeStyle = '#9f2e20';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(200, 492); ctx.lineTo(400, 492);
+      ctx.stroke();
+      ctx.textAlign = 'right';
+      ctx.fillText(currentMandal.name, canvas.width - 60, 490);
+
+      resolve(canvas.toDataURL('image/png'));
+    } catch(err) {
+      console.warn('Generic receipt canvas error:', err);
+      resolve('');
+    }
+  });
+}
+
 /* Digital Pavati HTML5 Canvas Image Generator (Exact Final Coordinates) */
 function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
+  // For non-vrindavan mandals, use the generic canvas receipt
+  if (currentMandal.slug !== 'vrindavan') return generateGenericReceiptCanvas(d);
   return new Promise((resolve) => {
     function draw(img) {
       try {
@@ -2121,10 +2210,42 @@ function generateReceiptCanvas(d, config = RECEIPT_CONFIG) {
 }
 
 /* WhatsApp Text Donation Receipt Generator */
+const DEFAULT_WA_TEMPLATE = `॥ श्री गणेशाय नमः ॥
+
+{mandal_name}
+
+देणगी पावती क्र.: {receipt_no}
+श्री/श्रीमती: {name}
+रक्कम: ₹{amount}/-
+अक्षरी: {amount_words}
+दिनांक: {date}
+
+आपल्या देणगीबद्दल मनःपूर्वक धन्यवाद! 🙏
+
+📱 मंडळाचे ऑनलाईन माहिती पोर्टल उपलब्ध आहे.
+
+पोर्टलवर आपण दररोजचे गणरायाचे फोटो, आरती वेळापत्रक, कार्यक्रम, देणगी माहिती व खर्चाचा पारदर्शक हिशोब पाहू शकता.
+
+🔗 पोर्टल लिंक:
+https://ganpati-mandal-zeta.vercel.app/public.html?mandal={mandal_slug}
+
+सर्वांनी पोर्टलला भेट द्यावी व इतरांनाही शेअर करावे.
+
+🙏 {mandal_name} 🌺`;
+
 function receiptText(d) {
   let receiptNo = String(d.id).replace(/\D/g, '').slice(-5) || '23758';
-  let dateFormatted = d.date ? d.date.split('-').reverse().join('-') : '31-08-2026';
-  return `॥ श्री गणेशाय नमः ॥\n\n${currentMandal.name}\n\nदेणगी पावती क्र.: ${receiptNo}\nश्री/श्रीमती: ${d.name}\nरक्कम: ₹${d.amount}/-\nअक्षरी: ${numberToMarathiWords(d.amount)}\nदिनांक: ${dateFormatted}\n\nआपल्या देणगीबद्दल मनःपूर्वक धन्यवाद! 🙏\n\n📱 मंडळाचे ऑनलाईन माहिती पोर्टल उपलब्ध आहे.\n\nपोर्टलवर आपण दररोजचे गणरायाचे फोटो, आरती वेळापत्रक, कार्यक्रम, देणगी माहिती व खर्चाचा पारदर्शक हिशोब पाहू शकता.\n\n🔗 पोर्टल लिंक:\nhttps://ganpati-mandal-zeta.vercel.app/public.html?mandal=${currentMandal.slug}\n\nसर्वांनी पोर्टलला भेट द्यावी व इतरांनाही शेअर करावे.\n\n🙏 ${currentMandal.name} 🌺`;
+  let dateFormatted = d.date ? d.date.split('-').reverse().join('-') : today.split('-').reverse().join('-');
+  let template = (db.settings && db.settings.waTemplate) ? db.settings.waTemplate : DEFAULT_WA_TEMPLATE;
+  return template
+    .replace(/{mandal_name}/g, currentMandal.name)
+    .replace(/{mandal_slug}/g, currentMandal.slug)
+    .replace(/{receipt_no}/g, receiptNo)
+    .replace(/{name}/g, d.name || '')
+    .replace(/{amount}/g, d.amount || 0)
+    .replace(/{amount_words}/g, numberToMarathiWords(d.amount || 0))
+    .replace(/{date}/g, dateFormatted)
+    .replace(/{mode}/g, d.mode || '');
 }
 
 function getWhatsAppReceiptUrl(d) {
@@ -2249,19 +2370,38 @@ function digitEmoji(num) {
   return digits[num - 1] || `${num}️⃣`;
 }
 
+const DEFAULT_AARTI_WA_TEMPLATE = `✨📿 || गणपती बाप्पा मोरया || 📿✨
+{header_date} {time_text} आरती होणार आहे. 🪔
+
+*आरती मानकरी:*
+{people}
+
+सर्वांनी सहकुटुंब वेळेत उपस्थित राहावे, ही नम्र विनंती. 🌸
+
+🌺 गणपती बाप्पा मोरया 🌺
+🙏 {mandal_name} 🙏`;
+
 function aartiWhatsAppMsg(type = 'Morning', targetDate = today) {
   let list = db.aartis.filter(a => a.date === targetDate && a.type === type);
-  let timeText = type === 'Morning' ? 'सकाळी 9:00 वा.' : 'रात्री 8:00 वा.';
+  let mTime = db.settings?.morningAartiTime || '09:00';
+  let eTime = db.settings?.eveningAartiTime || '20:00';
+  let timeText = type === 'Morning' ? ('सकाळी ' + time12(mTime) + ' वा.') : ('रात्री ' + time12(eTime) + ' वा.');
   let sessionName = type === 'Morning' ? 'सकाळी' : 'संध्याकाळी';
   let headerDate = dateFullInMarathi(targetDate);
 
   if (!list.length) {
-    return `✨📿 || गणपती बाप्पा मोरया || 📿✨\n${headerDate} ${sessionName} कोणतीही आरती आयोजित केलेली नाही. 🪔\n\n🌺 गणपती बाप्पा मोरया 🌺\n🙏 वृंदावन मंडळ 🙏`;
+    return `✨📿 || गणपती बाप्पा मोरया || 📿✨\n${headerDate} ${sessionName} कोणतीही आरती आयोजित केलेली नाही. 🪔\n\n🌺 गणपती बाप्पा मोरया 🌺\n🙏 ${currentMandal.name} 🙏`;
   }
 
   let peopleText = list.map((a, i) => `${digitEmoji(i + 1)} ${a.person}`).join('\n');
+  let tpl = (db.settings && db.settings.waAartiTemplate) ? db.settings.waAartiTemplate : DEFAULT_AARTI_WA_TEMPLATE;
 
-  return `✨📿 || गणपती बाप्पा मोरया || 📿✨\n${headerDate} ${timeText} आरती होणार आहे. 🪔\n\n*आरती मानकरी:*\n${peopleText}\n\nसर्वांनी सहकुटुंब वेळेत उपस्थित राहावे, ही नम्र विनंती. 🌸\n\n🌺 गणपती बाप्पा मोरया 🌺\n🙏 वृंदावन मंडळ 🙏`;
+  return tpl
+    .replace(/{mandal_name}/g, currentMandal.name)
+    .replace(/{header_date}/g, headerDate)
+    .replace(/{time_text}/g, timeText)
+    .replace(/{session}/g, sessionName)
+    .replace(/{people}/g, peopleText);
 }
 
 function openAartiMessageModal(selectedDate = today, selectedType = 'Morning') {
@@ -2364,21 +2504,72 @@ function toast(t) {
 
 
 /* Public Portal — load mandal data by ?mandal=slug param */
+
+/* Public Portal Landing Screen (Shown when visiting public.html without ?mandal=) */
+function publicPortalLanding() {
+  return `
+    <div class="public-container" style="max-width:560px; margin:40px auto; padding:20px; text-align:center;">
+      <div class="card" style="padding:36px 24px; border-radius:20px; box-shadow:0 8px 30px rgba(159,46,32,0.12);">
+        <div style="font-size:52px; margin-bottom:12px;">🪔</div>
+        <h2 style="font-family:'Noto Sans Devanagari', sans-serif; color:#7d1c12; margin:0 0 8px 0;">॥ श्री गणेशाय नमः ॥</h2>
+        <h3 style="color:#2c1b18; margin:0 0 16px 0; font-size:18px;">सार्वजनिक गणेशोत्सव माहिती व दर्शन दालन</h3>
+        <p style="color:#6e584f; font-size:14px; margin-bottom:24px; line-height:1.6;">
+          आपल्या मंडळाचे मुखदर्शन, आरती वेळापत्रक, कार्यक्रम व हिशोब पाहण्यासाठी खाली मंडळाचा कोड (Slug) प्रविष्ट करा:
+        </p>
+        <form onsubmit="event.preventDefault(); let s=document.getElementById('portalSlugInput').value.trim().toLowerCase(); if(s) window.location.href='public.html?mandal='+encodeURIComponent(s);" style="display:flex; gap:10px; max-width:400px; margin:0 auto 16px auto;">
+          <input id="portalSlugInput" type="text" placeholder="उदा. renukanagar किंवा vrindavan" style="flex:1; padding:12px 14px; border:1.5px solid #e0cdc0; border-radius:10px; font-size:15px; outline:none;" required>
+          <button type="submit" class="primary-btn" style="padding:12px 20px; border-radius:10px; white-space:nowrap;">पाहा →</button>
+        </form>
+        <div style="font-size:12px; color:#a07060; margin-top:20px;">
+          <a href="login.html" style="color:#9f2e20; text-decoration:underline;">मंडळ व्यवस्थापक लॉगिन</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function loadPublicMandalData() {
   let params = new URLSearchParams(window.location.search);
   let slug = params.get('mandal');
-  if (!slug || !cloud) return;
+  if (!slug) {
+    let loggedSlug = sessionStorage.getItem('mandal_slug');
+    if (loggedSlug) {
+      window.location.replace('public.html?mandal=' + encodeURIComponent(loggedSlug));
+      return;
+    }
+    let target = document.getElementById('page');
+    if (target) target.innerHTML = publicPortalLanding();
+    return;
+  }
+  if (!cloud) return;
   try {
     let { data, error } = await cloud.from('mandals').select('id,slug,name,city,contact_phone,nondani_no').eq('slug', slug.toLowerCase()).single();
-    if (error || !data) { console.warn('Public portal: mandal not found for slug', slug); return; }
-    // Temporarily populate sessionStorage so currentMandal works in publicView()
+    if (error || !data) {
+      let target = document.getElementById('page');
+      if (target) {
+        target.innerHTML = `
+          <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
+            <div class="card" style="padding:32px 20px;">
+              <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
+              <h3 style="color:#8b1c12;">मंडळ सापडले नाही (Mandal Not Found)</h3>
+              <p style="color:#6e584f; font-size:14px;">"${escapeHtml(slug)}" नावाचे कोणतेही मंडळ नोंदणीकृत नाही.</p>
+              <a href="public.html" class="primary-btn" style="display:inline-block; margin-top:14px; text-decoration:none;">इतर मंडळ शोधा</a>
+            </div>
+          </div>
+        `;
+      }
+      return;
+    }
     sessionStorage.setItem('mandal_id',    data.id);
     sessionStorage.setItem('mandal_slug',  data.slug);
     sessionStorage.setItem('mandal_name',  data.name);
     sessionStorage.setItem('mandal_city',  data.city);
     sessionStorage.setItem('mandal_phone', data.contact_phone);
     sessionStorage.setItem('mandal_nondani', data.nondani_no);
-    // Now load this mandal's data from cloud
+    document.title = 'श्री गणेश उत्सव - ' + data.name;
+
+    // Reset local db memory to completely empty before loading cloud data
+    db = { donations: [], expenses: [], aartis: [], events: [], contacts: [], alankar: [], documents: [], settings: seed.settings };
     await loadCloud();
     render();
   } catch(e) { console.warn('Public portal mandal load error:', e); }
@@ -2393,7 +2584,17 @@ document.addEventListener('DOMContentLoaded', () => {
   let modalEl = document.getElementById('modal');
   if (modalEl) modalEl.onclick = e => { if (e.target.id === 'modal') closeModal(); };
 
-  if (detectCurrentPage() === 'public' && window.location.search.includes('mandal=')) {
+  // Update dynamic mandal name/city in sidebar brand and topbar (all pages)
+  let brandEl = document.querySelector('.brand strong');
+  if (brandEl) brandEl.textContent = currentMandal.name;
+  let locationSpan = document.querySelector('.location span');
+  if (locationSpan) locationSpan.textContent = currentMandal.name;
+  let locationSmall = document.querySelector('.location small');
+  if (locationSmall) locationSmall.textContent = currentMandal.city || 'Mandal Manager';
+  let sideFootEl = document.querySelector('.side-foot');
+  if (sideFootEl) sideFootEl.innerHTML = '<span class="online-dot"></span> ' + currentMandal.slug;
+
+  if (detectCurrentPage() === 'public') {
     loadPublicMandalData();
   } else {
     render();
@@ -2402,4 +2603,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-if (!(detectCurrentPage() === 'public' && window.location.search.includes('mandal='))) { render(); loadCloud(); subscribeCloud(); }
+if (detectCurrentPage() === 'public') { loadPublicMandalData(); } else { render(); loadCloud(); subscribeCloud(); }
