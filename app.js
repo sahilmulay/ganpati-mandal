@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v13';
+const DATA_VERSION = '2026-mandal-prod-v14';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -425,7 +425,7 @@ function toCloud(type, row) {
     copy.valid_from = row.validFrom || row.valid_from || '';
     copy.valid_until = row.validUntil || row.valid_until || '';
     copy.image = img;
-    copy.image_url = img;
+    delete copy.image_url;
     delete copy.outwardNo;
     delete copy.issuedBy;
     delete copy.validFrom;
@@ -479,8 +479,33 @@ async function loadCloud() {
         return;
       }
       if (Array.isArray(data)) {
-        db[listName[type]] = data.map(row => fromCloud(type, row));
-        updatedAny = true;
+        let cloudRows = data.map(row => fromCloud(type, row));
+        if (cloudRows.length > 0) {
+          db[listName[type]] = cloudRows;
+          updatedAny = true;
+        } else if (db[listName[type]] && db[listName[type]].length > 0) {
+          if (type === 'document' && cloud) {
+            db[listName[type]].forEach(localDoc => {
+              let p = {
+                id: localDoc.id,
+                mandal_id: currentMandal.id,
+                title: localDoc.title || '',
+                category: localDoc.category || '',
+                icon: localDoc.icon || '📁',
+                outward_no: localDoc.outwardNo || '',
+                issued_by: localDoc.issuedBy || '',
+                valid_from: localDoc.validFrom || '',
+                valid_until: localDoc.validUntil || '',
+                status: localDoc.status || 'Pending',
+                note: localDoc.note || '',
+                image: localDoc.image || ''
+              };
+              cloud.from('documents').upsert(p).then(() => {});
+            });
+          }
+        } else {
+          db[listName[type]] = [];
+        }
       }
     } catch (err) {
       console.warn(`Cloud load error for ${type}:`, err);
@@ -741,8 +766,22 @@ function openDocForm(item = null) {
     (item ? 'Edit ' : 'Upload ') + 'Official Permission / Document',
     `<form onsubmit="submitDocForm(event,'${x.id || ''}')" novalidate>
       <div class="form-grid">
-        <div class="field full"><label>Document Title / Permission Name</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. पोलीस ठाणे मंडप परवानगी"></div>
-        <div class="field"><label>Category</label><select name="category">${['Police Permission', 'Gram Panchayat NOC', 'MSEDCL Electricity', 'Sound / Loudspeaker', 'Trust Registration', 'Fire Safety NOC', 'Other'].map(v => `<option ${x.category === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        <div class="field full">
+          <label>परवानगी प्रकार (Permission Category)</label>
+          <select name="category" onchange="let tf=this.form.querySelector('input[name=title]'); if(tf && !tf.value) { tf.value = this.options[this.selectedIndex].text.split('(')[0].trim(); }">
+            <option value="Police Permission" ${(x.category || '') === 'Police Permission' ? 'selected' : ''}>🚓 पोलीस ठाणे परवानगी (Police Permission)</option>
+            <option value="Gram Panchayat NOC" ${(x.category || '') === 'Gram Panchayat NOC' ? 'selected' : ''}>🏛️ ग्रामपंचायत / पालिका नाहरकत (Gram Panchayat NOC)</option>
+            <option value="MSEDCL Electricity" ${(x.category || '') === 'MSEDCL Electricity' ? 'selected' : ''}>⚡ महावितरण तात्पुरती वीज जोडणी (Electricity Connection)</option>
+            <option value="Sound / Loudspeaker" ${(x.category || '') === 'Sound / Loudspeaker' ? 'selected' : ''}>🔊 ध्वनीक्षेपक / लाऊडस्पीकर परवानगी (Sound Permission)</option>
+            <option value="Fire Safety NOC" ${(x.category || '') === 'Fire Safety NOC' ? 'selected' : ''}>🚒 अग्निशामक दल नाहरकत (Fire Safety NOC)</option>
+            <option value="Trust Registration" ${(x.category || '') === 'Trust Registration' ? 'selected' : ''}>📜 मंडळ अधिकृत नोंदणी (Trust Registration)</option>
+            <option value="Other" ${(x.category || '') === 'Other' ? 'selected' : ''}>📁 इतर अधिकृत परवानगी (Other Permission)</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>परवानगीचे नाव / शीर्षक (Document Title)</label>
+          <input name="title" required value="${escapeHtml(x.title || '')}" placeholder="उदा. ग्रामपंचायत नाहरकत दाखला / पोलीस परवानगी">
+        </div>
         <div class="field"><label>Outward / Ref Number (जावक क्र.)</label><input name="outwardNo" value="${escapeHtml(x.outwardNo || '')}" placeholder="e.g. जावक क्र. ४५/२०२६"></div>
         <div class="field full"><label>Issuing Authority / Office</label><input name="issuedBy" required value="${escapeHtml(x.issuedBy || '')}" placeholder="e.g. मिरज ग्रामीण पोलीस ठाणे / ग्रामपंचायत"></div>
         <div class="field"><label>Valid From</label><input name="validFrom" type="date" value="${x.validFrom || today}"></div>
@@ -815,14 +854,17 @@ async function submitDocForm(ev, id) {
     o.image = (existing && hasValidImage(existing.image)) ? existing.image : '';
   }
 
+  let cat = o.category || '';
+  let docIcon = cat.includes('Police') ? '🚓' : cat.includes('Gram') ? '🏛️' : cat.includes('Electricity') ? '⚡' : cat.includes('Sound') ? '🔊' : cat.includes('Fire') ? '🚒' : cat.includes('Trust') ? '📜' : '📁';
+
   let index = id ? list.findIndex(x => String(x.id) === String(id)) : -1;
   if (index >= 0) {
     o.id = id;
-    o.icon = list[index].icon || '📁';
+    o.icon = docIcon;
     list[index] = { ...list[index], ...o };
   } else {
-    o.id = 'doc' + (Date.now().toString().slice(-4));
-    o.icon = (o.category || '').includes('Police') ? '🚓' : (o.category || '').includes('Gram') ? '🏛️' : (o.category || '').includes('Electricity') ? '⚡' : (o.category || '').includes('Sound') ? '🔊' : '📜';
+    o.id = 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    o.icon = docIcon;
     list.unshift(o);
   }
   db.documents = list;
@@ -838,25 +880,23 @@ async function submitDocForm(ev, id) {
       mandal_id: currentMandal.id,
       title: o.title || '',
       category: o.category || '',
-      icon: o.icon || '📄',
+      icon: o.icon || '📁',
       outward_no: o.outwardNo || '',
       issued_by: o.issuedBy || '',
       valid_from: o.validFrom || '',
       valid_until: o.validUntil || '',
       status: o.status || 'Pending',
       note: o.note || '',
-      image: o.image || '',
-      image_url: o.image || ''
+      image: o.image || ''
     };
-    let isExisting = index >= 0;
-    if (isExisting) {
-      cloud.from('documents').update(docPayload).eq('id', o.id).then(({error}) => {
-        if (error && error.code !== 'PGRST205') console.warn('Doc cloud update error:', error);
-      });
-    } else {
-      cloud.from('documents').insert(docPayload).then(({error}) => {
-        if (error && error.code !== 'PGRST205') console.warn('Doc cloud insert error:', error);
-      });
+    try {
+      let { error } = await cloud.from('documents').upsert(docPayload);
+      if (error && error.code !== 'PGRST205') {
+        console.warn('Doc cloud upsert error:', error.message || error);
+        toast('कागदपत्र स्थानिक सेव्ह झाले (Cloud sync warning)');
+      }
+    } catch(err) {
+      console.warn('Doc cloud sync exception:', err);
     }
   }
 }
@@ -2120,11 +2160,18 @@ async function deleteItem(type, id) {
   closeModal();
   toast('Entry deleted successfully');
   render();
-  if (cloud && String(id).includes('-')) {
-    let { error } = await cloud.from(tableName[type]).delete().eq('id', id);
-    if (error && error.code !== 'PGRST205') {
-      toast('Cloud delete failed.');
-      console.warn(error);
+  if (cloud) {
+    try {
+      let query = cloud.from(tableName[type]).delete().eq('id', id);
+      if (currentMandal && currentMandal.id) {
+        query = query.eq('mandal_id', currentMandal.id);
+      }
+      let { error } = await query;
+      if (error && error.code !== 'PGRST205') {
+        console.warn('Cloud delete warning:', error.message || error);
+      }
+    } catch(err) {
+      console.warn('Cloud delete error:', err);
     }
   }
 }
