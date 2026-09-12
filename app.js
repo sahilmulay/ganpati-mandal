@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v16';
+const DATA_VERSION = '2026-mandal-prod-v17';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -464,7 +464,26 @@ function sortEventsChronological(list) {
   });
 }
 
-/* Resilient Per-Table Independent Cloud Loader & Auto-Sync Polling */
+/* ── Light column selects for background polling (no base64 image data) ── */
+const pollSelect = {
+  donation:  '*',
+  expense:   'id,mandal_id,date,description,category,paid_by,amount,outward_no,status,note,created_at',
+  aarti:     '*',
+  event:     'id,mandal_id,title,description,date,category,created_at',
+  contact:   '*',
+  alankar:   'id,mandal_id,date,title,type,note,created_at',
+  document:  'id,mandal_id,title,category,icon,outward_no,issued_by,valid_from,valid_until,status,note,created_at'
+};
+
+/* ── Fingerprint to detect real changes before re-rendering ─────── */
+let _lastCloudFp = '';
+function _cloudFingerprint() {
+  return Object.values(listName).map(k => {
+    let list = db[k] || [];
+    return list.length + (list[0] ? '-' + list[0].id : '');
+  }).join('|');
+}
+
 async function loadCloud() {
   if (!cloud) return;
   let types = Object.keys(tableName);
@@ -472,14 +491,26 @@ async function loadCloud() {
   let updatedAny = false;
   await Promise.allSettled(types.map(async (type) => {
     try {
-      let { data, error } = await cloud.from(tableName[type]).select('*').eq('mandal_id', currentMandal.id);
+      // Use light select during background polling — avoids re-downloading all base64 images
+      let { data, error } = await cloud.from(tableName[type]).select(pollSelect[type]).eq('mandal_id', currentMandal.id);
       if (error) {
         if (error.code === 'PGRST205') return;
         console.warn(`Supabase ${type} fetch error:`, error.message);
         return;
       }
       if (Array.isArray(data)) {
-        let cloudRows = data.map(row => fromCloud(type, row));
+        let cloudRows = data.map(row => {
+          let mapped = fromCloud(type, row);
+          // Preserve cached image for existing records (avoids losing photo on light fetch)
+          if (['expense', 'event', 'alankar', 'document'].includes(type) && !hasValidImage(mapped.image)) {
+            let cached = (db[listName[type]] || []).find(x => String(x.id) === String(mapped.id));
+            if (cached && hasValidImage(cached.image)) {
+              mapped.image     = cached.image;
+              mapped.image_url = cached.image_url;
+            }
+          }
+          return mapped;
+        });
         if (cloudRows.length > 0) {
           db[listName[type]] = cloudRows;
           updatedAny = true;
@@ -513,8 +544,12 @@ async function loadCloud() {
   }));
 
   if (updatedAny) {
+    let newFp = _cloudFingerprint();
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
-    render();
+    if (newFp !== _lastCloudFp) {
+      _lastCloudFp = newFp;
+      render(); // Only re-render if record counts or IDs actually changed
+    }
   }
 }
 
@@ -523,29 +558,38 @@ function subscribeCloud() {
   cloud.channel('mandal-live-updates').on('postgres_changes', { event: '*', schema: 'public' }, () => loadCloud()).subscribe();
 }
 
-/* Background Polling & Window Focus Listeners for Instant Multi-Device Sync */
-setInterval(loadCloud, 8000); // Auto-syncs across mobile & laptop every 8 seconds
-window.addEventListener('focus', loadCloud); // Syncs immediately when user switches to app tab
+/* Background Polling & Window Focus Listeners for Multi-Device Sync */
+setInterval(loadCloud, 30000); // Reduced from 8s → 30s to avoid hammering DB and blocking main thread
+window.addEventListener('focus', loadCloud);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') loadCloud();
 });
 
+/* ── Prevent double render: save() dispatches a storage event which
+       would trigger a second render() in the same tab. Block it.  ── */
+let _isSaving = false;
+
 function save() {
   try {
+    _isSaving = true;
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
     window.dispatchEvent(new Event('storage'));
   } catch (err) {
     console.warn('localStorage quota note:', err);
+  } finally {
+    _isSaving = false;
   }
 }
 
 window.addEventListener('storage', () => {
+  if (_isSaving) return; // Same-tab save — skip to avoid double render
   const d = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (d) {
     db = JSON.parse(d);
     render();
   }
 });
+
 
 const nav = [
   ['dashboard.html', 'dashboard', '⌂', 'Dashboard'],
@@ -2932,8 +2976,8 @@ async function loadPublicMandalData() {
   } catch(e) { console.warn('Public portal mandal load error:', e); }
 }
 
-/* Event listeners */
-document.addEventListener('DOMContentLoaded', () => {
+/* Event listeners & Single-Run App Initializer */
+function initApp() {
   let menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.onclick = () => document.querySelector('.sidebar')?.classList.toggle('open');
   let settingsBtn = document.getElementById('settingsBtn');
@@ -2958,6 +3002,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCloud();
     subscribeCloud();
   }
-});
+}
 
-if (detectCurrentPage() === 'public') { loadPublicMandalData(); } else { render(); loadCloud(); subscribeCloud(); }
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+
