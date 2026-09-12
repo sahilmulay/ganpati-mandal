@@ -911,68 +911,6 @@ function publicView() {
   let upcomingEvents = sortEventsChronological(db.events).slice(0, 6);
   let contactsList = db.contacts && db.contacts.length ? db.contacts : [];
 
-  // ── Festival Progress Bar ─────────────────────────────────────
-  let festStart = new Date(FESTIVAL_DATES[0].date);
-  let festEnd   = new Date(FESTIVAL_DATES[FESTIVAL_DATES.length - 1].date);
-  let todayDate = new Date(today);
-  let festTotalDays = FESTIVAL_DATES.length;
-  let isBefore = todayDate < festStart;
-  let isAfter  = todayDate > festEnd;
-  let currentDayIndex = -1;
-  FESTIVAL_DATES.forEach((fd, i) => { if (fd.date === today) currentDayIndex = i; });
-
-  let progressHtml = '';
-  if (isBefore) {
-    let daysLeft = Math.ceil((festStart - todayDate) / 86400000);
-    progressHtml = `
-      <div class="festival-progress-bar-wrap">
-        <div class="festival-progress-label">
-          <span>🥁 उत्सव सुरू होण्यास <b>${daysLeft} दिवस</b> शिल्लक</span>
-          <span style="font-size:11px; opacity:0.85;">सुरुवात: ${FESTIVAL_DATES[0].marathi}</span>
-        </div>
-        <div class="festival-days-track">
-          ${FESTIVAL_DATES.map((fd, i) => `
-            <div class="festival-day-dot upcoming" title="${fd.marathi}">
-              <span class="day-num">${i + 1}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
-  } else if (isAfter) {
-    progressHtml = `
-      <div class="festival-progress-bar-wrap completed">
-        <div class="festival-progress-label">
-          <span>🙏 श्री गणेश उत्सव ${new Date(FESTIVAL_DATES[0].date).getFullYear()} यशस्वीरीत्या पार पडला!</span>
-          <span style="font-size:11px; opacity:0.85;">गणपती बाप्पा मोरया 🌺</span>
-        </div>
-        <div class="festival-days-track">
-          ${FESTIVAL_DATES.map((fd, i) => `
-            <div class="festival-day-dot done" title="${fd.marathi}">
-              <span class="day-num">✓</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
-  } else {
-    let dayLabel = currentDayIndex >= 0 ? `दिवस ${currentDayIndex + 1}/${festTotalDays}` : 'उत्सव सुरु आहे!';
-    progressHtml = `
-      <div class="festival-progress-bar-wrap">
-        <div class="festival-progress-label">
-          <span>🎺 <b>${dayLabel}</b> — आजचा दिवस</span>
-          <span style="font-size:11px; opacity:0.85;">${currentDayIndex >= 0 ? FESTIVAL_DATES[currentDayIndex].marathi : ''}</span>
-        </div>
-        <div class="festival-days-track">
-          ${FESTIVAL_DATES.map((fd, i) => {
-            let cls = i < currentDayIndex ? 'done' : i === currentDayIndex ? 'today' : 'upcoming';
-            let label = i < currentDayIndex ? '✓' : i + 1;
-            return `<div class="festival-day-dot ${cls}" title="${fd.marathi}"><span class="day-num">${label}</span></div>`;
-          }).join('')}
-        </div>
-        <div class="festival-fill-bar">
-          <div class="festival-fill-inner" style="width:${Math.round(((currentDayIndex + 1) / festTotalDays) * 100)}%"></div>
-        </div>
-      </div>`;
-  }
 
   // ── Swipeable Gallery ────────────────────────────────────────────
   let galleryImages = alankars.filter(a => hasValidImage(a.image));
@@ -1052,9 +990,6 @@ function publicView() {
         <p style="margin:4px 0 10px 0; opacity:0.9; font-size:12px;">${currentMandal.city}${currentMandal.nondani ? ' | <b>नोंदणी क्र. ' + currentMandal.nondani + '</b>' : ''}</p>
         <span class="public-header-badge">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
       </div>
-
-      <!-- Festival Progress Bar -->
-      ${progressHtml}
 
       <!-- Section 1: Daily Bappa Alankar & Mukh Darshan Gallery -->
       <div class="card" style="margin-bottom:20px;">
