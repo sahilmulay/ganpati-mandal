@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v14';
+const DATA_VERSION = '2026-mandal-prod-v15';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -1058,7 +1058,51 @@ function publicView() {
         </div>
       </div>
 
-      <!-- Section 5: Public Committee Contacts with Call & WhatsApp Buttons -->
+      <!-- Section 5: Official Permissions & Documents -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+          <h3>📁 अधिकृत परवानग्या व कागदपत्रे (Official Permissions)</h3>
+          <span style="font-size:11px; color:#8b261e; font-weight:600;">(मंडळाच्या कायदेशीर परवानग्यांची यादी)</span>
+        </div>
+        ${(db.documents && db.documents.length) ? `
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:10px;">
+            ${db.documents.map(doc => {
+              let hasPhoto = hasValidImage(doc.image);
+              let isPdf = isPdfData(doc.image);
+              let statusColor = doc.status === 'Approved' ? '#15803d' : '#b45309';
+              let statusBg   = doc.status === 'Approved' ? '#dcfce7' : '#fef3c7';
+              return `
+              <div style="background:#fff8f5; border:1px solid #f0d9cc; border-radius:12px; padding:14px 14px 12px 14px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                  <span style="font-size:26px;">${doc.icon || '📁'}</span>
+                  <div>
+                    <div style="font-weight:700; font-size:13px; color:#2c1b18; line-height:1.3;">${escapeHtml(doc.title)}</div>
+                    <div style="font-size:11px; color:#6e584f; margin-top:2px;">${escapeHtml(doc.issuedBy || 'अधिकृत विभाग')}</div>
+                  </div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                  <span style="font-size:11px; padding:3px 10px; border-radius:6px; font-weight:700; background:${statusBg}; color:${statusColor};">● ${escapeHtml(doc.status || 'Pending')}</span>
+                  ${doc.validUntil ? `<span style="font-size:11px; color:#6e584f;">वैधता: ${escapeHtml(doc.validUntil)}</span>` : ''}
+                </div>
+                ${hasPhoto ? `
+                  <div style="margin-top:10px;">
+                    <button class="text-link" style="font-weight:700; color:#8b261e; font-size:12px;" onclick="openBill('${escapeHtml(doc.image)}')">
+                      ${isPdf ? '📄 View PDF Document' : '🖼️ View Permission Photo'}
+                    </button>
+                  </div>
+                ` : `<div style="margin-top:8px; font-size:11px; color:#9ca3af;">⏳ Photo / PDF not yet uploaded</div>`}
+              </div>`;
+            }).join('')}
+          </div>
+        ` : `
+          <div class="empty" style="padding:28px 16px; text-align:center;">
+            <div class="empty-icon" style="font-size:40px; margin-bottom:8px;">📁</div>
+            <p style="color:#6e584f; font-size:13px; margin:0;">अद्याप कोणत्याही अधिकृत परवानग्या नोंदवलेल्या नाहीत.</p>
+          </div>
+        `}
+      </div>
+
+      <!-- Section 6: Public Committee Contacts with Call & WhatsApp Buttons -->
       <div class="card" style="margin-bottom:20px;">
         <div class="card-title">
           <h3>👥 मंडळ कार्यकारिणी व महत्वाचे संपर्क (Committee Contacts)</h3>
