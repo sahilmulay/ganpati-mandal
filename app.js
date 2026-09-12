@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v15';
+const DATA_VERSION = '2026-mandal-prod-v16';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -911,11 +911,77 @@ function publicView() {
   let upcomingEvents = sortEventsChronological(db.events).slice(0, 6);
   let contactsList = db.contacts && db.contacts.length ? db.contacts : [];
 
-  let galleryHtml = alankars.length ? alankars.map(item => `
-    <div class="alankar-card" onclick="openBill('${item.image}')">
+  // ── Festival Progress Bar ─────────────────────────────────────
+  let festStart = new Date(FESTIVAL_DATES[0].date);
+  let festEnd   = new Date(FESTIVAL_DATES[FESTIVAL_DATES.length - 1].date);
+  let todayDate = new Date(today);
+  let festTotalDays = FESTIVAL_DATES.length;
+  let isBefore = todayDate < festStart;
+  let isAfter  = todayDate > festEnd;
+  let currentDayIndex = -1;
+  FESTIVAL_DATES.forEach((fd, i) => { if (fd.date === today) currentDayIndex = i; });
+
+  let progressHtml = '';
+  if (isBefore) {
+    let daysLeft = Math.ceil((festStart - todayDate) / 86400000);
+    progressHtml = `
+      <div class="festival-progress-bar-wrap">
+        <div class="festival-progress-label">
+          <span>🥁 उत्सव सुरू होण्यास <b>${daysLeft} दिवस</b> शिल्लक</span>
+          <span style="font-size:11px; opacity:0.85;">सुरुवात: ${FESTIVAL_DATES[0].marathi}</span>
+        </div>
+        <div class="festival-days-track">
+          ${FESTIVAL_DATES.map((fd, i) => `
+            <div class="festival-day-dot upcoming" title="${fd.marathi}">
+              <span class="day-num">${i + 1}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  } else if (isAfter) {
+    progressHtml = `
+      <div class="festival-progress-bar-wrap completed">
+        <div class="festival-progress-label">
+          <span>🙏 श्री गणेश उत्सव ${new Date(FESTIVAL_DATES[0].date).getFullYear()} यशस्वीरीत्या पार पडला!</span>
+          <span style="font-size:11px; opacity:0.85;">गणपती बाप्पा मोरया 🌺</span>
+        </div>
+        <div class="festival-days-track">
+          ${FESTIVAL_DATES.map((fd, i) => `
+            <div class="festival-day-dot done" title="${fd.marathi}">
+              <span class="day-num">✓</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  } else {
+    let dayLabel = currentDayIndex >= 0 ? `दिवस ${currentDayIndex + 1}/${festTotalDays}` : 'उत्सव सुरु आहे!';
+    progressHtml = `
+      <div class="festival-progress-bar-wrap">
+        <div class="festival-progress-label">
+          <span>🎺 <b>${dayLabel}</b> — आजचा दिवस</span>
+          <span style="font-size:11px; opacity:0.85;">${currentDayIndex >= 0 ? FESTIVAL_DATES[currentDayIndex].marathi : ''}</span>
+        </div>
+        <div class="festival-days-track">
+          ${FESTIVAL_DATES.map((fd, i) => {
+            let cls = i < currentDayIndex ? 'done' : i === currentDayIndex ? 'today' : 'upcoming';
+            let label = i < currentDayIndex ? '✓' : i + 1;
+            return `<div class="festival-day-dot ${cls}" title="${fd.marathi}"><span class="day-num">${label}</span></div>`;
+          }).join('')}
+        </div>
+        <div class="festival-fill-bar">
+          <div class="festival-fill-inner" style="width:${Math.round(((currentDayIndex + 1) / festTotalDays) * 100)}%"></div>
+        </div>
+      </div>`;
+  }
+
+  // ── Swipeable Gallery ────────────────────────────────────────────
+  let galleryImages = alankars.filter(a => hasValidImage(a.image));
+  let galleryHtml = galleryImages.length ? galleryImages.map((item, idx) => `
+    <div class="alankar-card" onclick="openGallery(${idx})">
       <div class="alankar-img-wrap">
         <img src="${item.image}" alt="${escapeHtml(item.title)}" loading="lazy">
         <span class="alankar-date-tag">📅 ${dateLabelInMarathi(item.date)}</span>
+        <span class="gallery-counter-badge">${idx + 1}/${galleryImages.length}</span>
       </div>
       <div class="alankar-info">
         <strong>${escapeHtml(item.title)}</strong>
@@ -923,6 +989,7 @@ function publicView() {
       </div>
     </div>
   `).join('') : '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो अपलोड केलेले नाहीत.</div>';
+
 
   let donationRows = sortedDonations.map((d, index) => {
     let isExtra = index >= 4;
@@ -986,16 +1053,20 @@ function publicView() {
         <span class="public-header-badge">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
       </div>
 
+      <!-- Festival Progress Bar -->
+      ${progressHtml}
+
       <!-- Section 1: Daily Bappa Alankar & Mukh Darshan Gallery -->
       <div class="card" style="margin-bottom:20px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन व पूजा अलंकार (${alankars.length} फोटो)</h3>
-          <span style="font-size:11px; color:#8b261e; font-weight:600;">(फोटोवर टॅप करून झूम करा)</span>
+          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन व पूजा अलंकार (${galleryImages.length} फोटो)</h3>
+          <span style="font-size:11px; color:#8b261e; font-weight:600;">👆 फोटोवर टॅप करा — स्लाइड करा (Swipe Gallery)</span>
         </div>
         <div class="alankar-grid">
           ${galleryHtml}
         </div>
       </div>
+
 
       <!-- Section 2: Financial Summary Cards -->
       <section class="stats" style="margin-bottom:20px;">
@@ -1159,6 +1230,92 @@ function togglePublicExpenses() {
   let isHidden = extraRows[0].style.display === 'none';
   extraRows.forEach(r => r.style.display = isHidden ? '' : 'none');
   btn.textContent = isHidden ? '▲ Hide extra expenses (कम दाखवा)' : `▼ View all expenses (सर्व खर्च पहा - ${db.expenses.length})`;
+}
+
+/* ── Swipeable Photo Gallery Lightbox ───────────────────────────── */
+let _galleryItems = [];
+let _galleryIdx   = 0;
+
+function openGallery(idx) {
+  _galleryItems = (db.alankar || []).filter(a => hasValidImage(a.image));
+  if (!_galleryItems.length) return;
+  _galleryIdx = Math.min(idx, _galleryItems.length - 1);
+  _renderGalleryLightbox();
+}
+
+function _renderGalleryLightbox() {
+  let item  = _galleryItems[_galleryIdx];
+  let total = _galleryItems.length;
+  let hasPrev = _galleryIdx > 0;
+  let hasNext = _galleryIdx < total - 1;
+  let isPdf   = isPdfData(item.image);
+
+  let existing = document.getElementById('galleryLightbox');
+  if (existing) existing.remove();
+
+  let lb = document.createElement('div');
+  lb.id = 'galleryLightbox';
+  lb.innerHTML = `
+    <div class="gallery-lb-backdrop" onclick="closeGallery()"></div>
+    <div class="gallery-lb-shell">
+      <div class="gallery-lb-topbar">
+        <span class="gallery-lb-counter">${_galleryIdx + 1} / ${total}</span>
+        <span class="gallery-lb-title">${escapeHtml(item.title)}</span>
+        <button class="gallery-lb-close" onclick="closeGallery()" aria-label="Close">✕</button>
+      </div>
+      <div class="gallery-lb-stage" id="galleryStage">
+        ${isPdf
+          ? `<div style="text-align:center;padding:40px 20px;color:#fff;"><div style="font-size:64px;">📄</div><p style="margin:12px 0 20px;">${escapeHtml(item.title)}</p><a href="${escapeHtml(item.image)}" target="_blank" class="primary-btn">Open PDF</a></div>`
+          : `<img class="gallery-lb-img" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" draggable="false">`}
+      </div>
+      <div class="gallery-lb-info">
+        <span>📅 ${dateLabelInMarathi(item.date)}</span>
+        ${item.note ? `<span style="margin-left:10px;opacity:0.8;">${escapeHtml(item.note)}</span>` : ''}
+      </div>
+      <div class="gallery-lb-nav">
+        <button class="gallery-nav-btn" onclick="galleryPrev()" ${hasPrev ? '' : 'disabled'} aria-label="Previous">‹</button>
+        <div class="gallery-dots">
+          ${_galleryItems.map((_, i) => `<span class="gallery-dot ${i === _galleryIdx ? 'active' : ''}" onclick="openGallery(${i})"></span>`).join('')}
+        </div>
+        <button class="gallery-nav-btn" onclick="galleryNext()" ${hasNext ? '' : 'disabled'} aria-label="Next">›</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(lb);
+
+  // Keyboard navigation
+  lb._keyHandler = (e) => {
+    if (e.key === 'ArrowLeft')  galleryPrev();
+    if (e.key === 'ArrowRight') galleryNext();
+    if (e.key === 'Escape')     closeGallery();
+  };
+  document.addEventListener('keydown', lb._keyHandler);
+
+  // Touch swipe
+  let stage = document.getElementById('galleryStage');
+  let touchStartX = null;
+  stage.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    if (touchStartX === null) return;
+    let dx = e.changedTouches[0].clientX - touchStartX;
+    touchStartX = null;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0) galleryNext(); else galleryPrev();
+  }, { passive: true });
+}
+
+function galleryPrev() {
+  if (_galleryIdx > 0) { _galleryIdx--; _renderGalleryLightbox(); }
+}
+function galleryNext() {
+  if (_galleryIdx < _galleryItems.length - 1) { _galleryIdx++; _renderGalleryLightbox(); }
+}
+function closeGallery() {
+  let lb = document.getElementById('galleryLightbox');
+  if (lb) {
+    if (lb._keyHandler) document.removeEventListener('keydown', lb._keyHandler);
+    lb.remove();
+  }
 }
 
 /* Dashboard Page */

@@ -918,4 +918,245 @@ body {
 }
 
 
+/* ── Gallery Counter Badge on Alankar Cards ─────────────────────── */
+.gallery-counter-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+}
 
+/* ── Full-Screen Swipeable Gallery Lightbox ─────────────────────── */
+#galleryLightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.gallery-lb-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+}
+
+.gallery-lb-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  max-height: 100dvh;
+  background: #1a1008;
+}
+
+.gallery-lb-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  gap: 8px;
+}
+
+.gallery-lb-counter {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f9c97c;
+  min-width: 42px;
+}
+
+.gallery-lb-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gallery-lb-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.gallery-lb-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+  touch-action: pan-y;
+}
+
+.gallery-lb-img {
+  max-width: 100%;
+  max-height: 72dvh;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.gallery-lb-info {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #c4a882;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gallery-lb-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 14px;
+  background: rgba(0, 0, 0, 0.6);
+  gap: 8px;
+}
+
+.gallery-nav-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.gallery-nav-btn:disabled { opacity: 0.25; cursor: default; }
+.gallery-nav-btn:not(:disabled):hover { background: rgba(255,255,255,0.22); }
+
+.gallery-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  flex: 1;
+  overflow: hidden;
+}
+
+.gallery-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.15s;
+}
+.gallery-dot.active {
+  background: #f9c97c;
+  transform: scale(1.35);
+}
+.gallery-dot:hover:not(.active) { background: rgba(255,255,255,0.6); }
+
+/* ── Festival Progress Bar ──────────────────────────────────────── */
+.festival-progress-bar-wrap {
+  background: linear-gradient(135deg, #8b1c12 0%, #c0522a 100%);
+  border-radius: 16px;
+  padding: 14px 16px 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 18px rgba(139, 28, 18, 0.22);
+}
+.festival-progress-bar-wrap.completed {
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
+}
+
+.festival-progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.festival-days-track {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.festival-day-dot {
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+.festival-day-dot.done {
+  background: rgba(255, 255, 255, 0.95);
+  color: #15803d;
+}
+.festival-day-dot.today {
+  background: #fde68a;
+  color: #7c2d12;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.5);
+  transform: scale(1.18);
+}
+.festival-day-dot.upcoming {
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.festival-fill-bar {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 99px;
+  height: 6px;
+  overflow: hidden;
+}
+.festival-fill-inner {
+  height: 100%;
+  background: #fde68a;
+  border-radius: 99px;
+  transition: width 0.8s ease;
+}
+
+.day-num { font-size: 10px; font-weight: 800; line-height: 1; }
+
+@media (max-width: 420px) {
+  .gallery-lb-shell { max-height: 100dvh; }
+  .gallery-lb-img   { max-height: 66dvh; }
+  .festival-day-dot { font-size: 9px; }
+  .day-num          { font-size: 9px; }
+}
