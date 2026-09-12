@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v19';
+const DATA_VERSION = '2026-mandal-prod-v20';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -385,7 +385,13 @@ function formatEventDateTimeDisplay(dateStr) {
 
 function fromCloud(type, row) {
   let img = hasValidImage(row.image) ? row.image.trim() : (hasValidImage(row.image_url) ? row.image_url.trim() : '');
-  if (type === 'expense') return { ...row, paidBy: row.paid_by, image: img, image_url: img };
+  if (type === 'expense') {
+    let pBy = row.paid_by || '';
+    let mode = row.mode || 'Cash';
+    if (pBy.includes('(UPI)')) mode = 'UPI';
+    else if (pBy.includes('(Cash)')) mode = 'Cash';
+    return { ...row, paidBy: pBy, mode: mode, image: img, image_url: img };
+  }
   if (type === 'event') return { ...row, date: formatDateTimeLocal(row.date), image: img, image_url: img };
   if (type === 'document') return {
     ...row,
@@ -406,10 +412,17 @@ function toCloud(type, row) {
   delete copy.image;
   let img = hasValidImage(row.image) ? row.image.trim() : (hasValidImage(row.image_url) ? row.image_url.trim() : '');
   if (type === 'expense') {
-    copy.paid_by = copy.paidBy || copy.paid_by || 'Mandal';
+    let pBy = (copy.paidBy || copy.paid_by || 'Mandal').trim();
+    let m = (copy.mode || 'Cash').trim();
+    if (m && !pBy.includes('(' + m + ')')) {
+      pBy = pBy.replace(/\s*\((Cash|UPI)\)/gi, '').trim();
+      pBy = `${pBy} (${m})`;
+    }
+    copy.paid_by = pBy;
     copy.image_url = img;
     delete copy.image;
     delete copy.paidBy;
+    delete copy.mode;
   }
   if (type === 'event') {
     copy.image_url = img;
@@ -1499,7 +1512,10 @@ function expenses() {
           <span>${escapeHtml(e.category)}${hasValidImage(e.image) ? ' • 📎 Bill Attached' : ''}</span>
         </div>
       </td>
-      <td>${escapeHtml(e.paidBy)}</td>
+      <td>
+        ${escapeHtml(e.paidBy || '')}
+        ${e.mode ? `<span class="tag ${e.mode === 'UPI' ? 'online' : 'cash'}" style="margin-left:4px; font-size:9.5px; font-weight:700;">${escapeHtml(e.mode)}</span>` : ''}
+      </td>
       <td class="amount expense-t">${rupees(e.amount)}</td>
       <td>
         ${hasValidImage(e.image) ? `<button class="text-link view-bill-btn" onclick="openBill('${escapeHtml(e.image)}')">👁 View Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}
@@ -1513,7 +1529,7 @@ function expenses() {
       <div class="expense-card-main">
         <span class="expense-meta">${dateLabel(e.date)} · ${escapeHtml(e.category)}</span>
         <strong>${escapeHtml(e.description)}</strong>
-        <small>Paid by ${escapeHtml(e.paidBy)}</small>
+        <small>Paid by ${escapeHtml(e.paidBy || '')} ${e.mode ? `• <span class="tag ${e.mode === 'UPI' ? 'online' : 'cash'}" style="font-size:9.5px; font-weight:700;">${escapeHtml(e.mode)}</span>` : ''}</small>
       </div>
       <div class="expense-card-actions">
         <b class="amount expense-t">${rupees(e.amount)}</b>
@@ -2055,6 +2071,12 @@ function openForm(type, item = null) {
       <div class="field"><label>Amount (₹)</label><input name="amount" type="number" required value="${x.amount || ''}" placeholder="0"></div>
       <div class="field full"><label>Description</label><input name="description" required value="${escapeHtml(x.description || '')}" placeholder="What was this expense for?"></div>
       <div class="field"><label>Paid by</label><input name="paidBy" required value="${escapeHtml(x.paidBy || '')}" placeholder="Name"></div>
+      <div class="field"><label>Payment mode</label>
+        <select name="mode">
+          <option value="Cash" ${(x.mode || 'Cash') === 'Cash' ? 'selected' : ''}>💵 Cash</option>
+          <option value="UPI" ${x.mode === 'UPI' ? 'selected' : ''}>📱 UPI</option>
+        </select>
+      </div>
       <div class="field"><label>Date</label><input name="date" type="date" value="${x.date || today}"></div>
       <div class="field full"><label>Bill photo (optional)</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
       <div class="field full" id="billFormPreview">
@@ -2164,6 +2186,12 @@ async function submitForm(ev, type, id) {
     showLoader('खर्च नोंदवला जात आहे... (Saving Expense...)');
   } else if (type === 'donation') {
     showLoader('देणगी नोंदवली जात आहे... (Saving Donation...)');
+  } else if (type === 'aarti') {
+    showLoader('महाआरती नोंदवली जात आहे... (Saving Aarti...)');
+  } else if (type === 'event') {
+    showLoader('कार्यक्रम नोंदवला जात आहे... (Saving Event...)');
+  } else if (type === 'contact') {
+    showLoader('संपर्क जतन होत आहे... (Saving Contact...)');
   } else {
     showLoader('माहिती सेव्ह होत आहे... (Saving...)');
   }
@@ -2256,9 +2284,18 @@ async function saveItem(type, id, o) {
     toast('⚠️ स्थानिक सेव्ह झाले (Cloud sync error)');
   } else {
     if (type === 'donation') {
+      toast('✅ देणगी नोंद यशस्वी! (Donation registered successfully)');
       openReceiptModal(o.id);
     } else if (type === 'expense') {
       toast('✅ खर्च नोंद यशस्वी! (Expense registered successfully)');
+    } else if (type === 'aarti') {
+      toast('✅ महाआरती नोंद यशस्वी! (Aarti registered successfully)');
+    } else if (type === 'event') {
+      toast('✅ कार्यक्रम / सूचना नोंद यशस्वी! (Event registered successfully)');
+    } else if (type === 'contact') {
+      toast('✅ संपर्क नोंद यशस्वी! (Contact saved successfully)');
+    } else if (type === 'alankar') {
+      toast('✅ मुखदर्शन फोटो जतन झाला! (Photo saved successfully)');
     } else {
       toast('✅ यशस्वीरीत्या जतन झाले! (Saved successfully)');
     }
@@ -2340,7 +2377,7 @@ async function deleteItem(type, id) {
   db[key] = db[key].filter(x => String(x.id) !== String(id));
   save();
   closeModal();
-  toast('Entry deleted successfully');
+  toast('🗑️ नोंद यशस्वीरीत्या हटवली! (Deleted successfully)');
   render();
   if (cloud) {
     try {
