@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v21';
+const DATA_VERSION = '2026-mandal-prod-v22';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -385,6 +385,81 @@ function formatEventDateTimeDisplay(dateStr) {
   let ampm = hours >= 12 ? 'PM' : 'AM';
   let h12 = ((hours + 11) % 12 + 1);
   return `${datePart} · ${h12}:${mins} ${ampm}`;
+}
+
+/* ── Strictly Present & Future Event Date/Time Helpers (No Past Dates/Times) ── */
+function getUpcomingEventDates() {
+  let dates = [];
+  let now = new Date();
+  for (let i = 0; i < 45; i++) {
+    let d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    let y = d.getFullYear();
+    let m = String(d.getMonth() + 1).padStart(2, '0');
+    let day = String(d.getDate()).padStart(2, '0');
+    let iso = `${y}-${m}-${day}`;
+    let label = '';
+    let fest = FESTIVAL_DATES.find(f => f.date === iso);
+    if (i === 0) {
+      label = `आज (${d.getDate()} ${marathiMonthName(d.getMonth() + 1)})`;
+    } else if (i === 1) {
+      label = `उद्या (${d.getDate()} ${marathiMonthName(d.getMonth() + 1)})`;
+    } else {
+      let dayNames = ['रविवार', 'सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
+      label = `${d.getDate()} ${marathiMonthName(d.getMonth() + 1)} (${dayNames[d.getDay()]})`;
+    }
+    if (fest && fest.title) {
+      let extra = fest.title.split(' - ')[1];
+      if (extra) label += ` - ${extra}`;
+    }
+    dates.push({ date: iso, label });
+  }
+  return dates;
+}
+
+function getEventTimeOptions(selectedDate, selectedTime = '') {
+  let now = new Date();
+  let todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  let isToday = (!selectedDate || selectedDate === todayIso);
+  let currentMinutes = now.getHours() * 60 + now.getMinutes();
+  let options = [];
+
+  let curH = String(now.getHours()).padStart(2, '0');
+  let curM = String(now.getMinutes()).padStart(2, '0');
+  let curTimeStr = `${curH}:${curM}`;
+
+  if (isToday) {
+    options.push({
+      value: curTimeStr,
+      label: `⏰ आत्ताची वेळ - ${time12(curTimeStr)} (Current Time)`
+    });
+  }
+
+  for (let h = 6; h < 24; h++) {
+    for (let m of [0, 15, 30, 45]) {
+      let totalM = h * 60 + m;
+      if (isToday && totalM <= currentMinutes) continue;
+      let timeVal = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      options.push({ value: timeVal, label: time12(timeVal) });
+    }
+  }
+
+  if (!isToday) {
+    for (let h = 0; h < 6; h++) {
+      for (let m of [0, 15, 30, 45]) {
+        let timeVal = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        options.push({ value: timeVal, label: time12(timeVal) + ' (पहाटे)' });
+      }
+    }
+  }
+
+  return options;
+}
+
+function updateEventTimeOptions(selectedDate) {
+  let timeSelect = document.getElementById('eventTimeSelect');
+  if (!timeSelect) return;
+  let opts = getEventTimeOptions(selectedDate);
+  timeSelect.innerHTML = opts.map(t => `<option value="${t.value}">${escapeHtml(t.label)}</option>`).join('');
 }
 
 function fromCloud(type, row) {
@@ -2105,12 +2180,44 @@ function openForm(type, item = null) {
       </div>
       <div class="field full"><label>टीप (Optional Note)</label><textarea name="note" placeholder="काही विशेष नोंद असल्यास…">${escapeHtml(x.note || '')}</textarea></div>
     `,
-    event: `
-      <div class="field full"><label>Title / Announcement Name</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. भजन संध्या किंवा महाप्रसाद"></div>
-      <div class="field full"><label>Date & Time (तारीख व वेळ)</label><input name="date" type="datetime-local" required min="${currentDateTimeLocal()}" value="${formatDateTimeLocal(x.date)}"></div>
-      <div class="field full"><label>Description / Details</label><textarea name="description" placeholder="कार्यक्रमाची संपूर्ण माहिती…">${escapeHtml(x.description || '')}</textarea></div>
-      <div class="field full"><label>Event image (optional)</label><input name="image" type="file" accept="image/*"></div>
-    `,
+    event: (() => {
+      let now = new Date();
+      let curH = String(now.getHours()).padStart(2, '0');
+      let curM = String(now.getMinutes()).padStart(2, '0');
+      let defaultDate = today;
+      let defaultTime = `${curH}:${curM}`;
+
+      if (x.date) {
+        let parts = x.date.split('T');
+        defaultDate = parts[0] || today;
+        defaultTime = (parts[1] || `${curH}:${curM}`).slice(0, 5);
+      }
+
+      let upcomingDates = getUpcomingEventDates();
+      if (!upcomingDates.some(d => d.date === defaultDate)) {
+        upcomingDates.unshift({ date: defaultDate, label: `${defaultDate} (Event Date)` });
+      }
+      let timeOpts = getEventTimeOptions(defaultDate, defaultTime);
+      if (!timeOpts.some(t => t.value === defaultTime)) {
+        timeOpts.unshift({ value: defaultTime, label: time12(defaultTime) });
+      }
+
+      return `
+        <div class="field full"><label>Title / Announcement Name (कार्यक्रमाचे नाव / शीर्षक)</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="उदा. भजन संध्या किंवा महाप्रसाद"></div>
+        <div class="field"><label>तारीख (Date - फक्त आज व पुढील दिवस)</label>
+          <select name="eventDate" onchange="updateEventTimeOptions(this.value)">
+            ${upcomingDates.map(d => `<option value="${d.date}" ${d.date === defaultDate ? 'selected' : ''}>${escapeHtml(d.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>वेळ (Time - आत्तापासून पुढील वेळ)</label>
+          <select id="eventTimeSelect" name="eventTime">
+            ${timeOpts.map(t => `<option value="${t.value}" ${t.value === defaultTime ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field full"><label>Description / Details (सविस्तर माहिती)</label><textarea name="description" placeholder="कार्यक्रमाची संपूर्ण माहिती…">${escapeHtml(x.description || '')}</textarea></div>
+        <div class="field full"><label>Event image (optional)</label><input name="image" type="file" accept="image/*"></div>
+      `;
+    })(),
     contact: `
       <div class="field full"><label>Name</label><input name="name" required value="${escapeHtml(x.name || '')}"></div>
       <div class="field"><label>Role / designation</label><input name="role" required value="${escapeHtml(x.role || '')}"></div>
@@ -2188,10 +2295,12 @@ async function submitForm(ev, type, id) {
       toast('कृपया कार्यक्रमाचे नाव / शीर्षक प्रविष्ट करा (Please enter title)');
       return;
     }
-    if (!o.date) {
-      toast('कृपया तारीख व वेळ निवडा (Please select date & time)');
-      return;
-    }
+    let evDate = o.eventDate || (o.date ? o.date.split('T')[0] : today);
+    let evTime = o.eventTime || (o.date ? o.date.split('T')[1] : '19:00');
+    o.date = `${evDate}T${evTime}`;
+    delete o.eventDate;
+    delete o.eventTime;
+
     let eventTime = new Date(o.date).getTime();
     let nowTime = Date.now();
     if (isNaN(eventTime) || eventTime < (nowTime - 60000)) {
