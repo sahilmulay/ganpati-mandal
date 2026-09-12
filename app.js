@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v18';
+const DATA_VERSION = '2026-mandal-prod-v19';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -406,14 +406,14 @@ function toCloud(type, row) {
   delete copy.image;
   let img = hasValidImage(row.image) ? row.image.trim() : (hasValidImage(row.image_url) ? row.image_url.trim() : '');
   if (type === 'expense') {
-    copy.paid_by = copy.paidBy;
-    copy.image = img;
+    copy.paid_by = copy.paidBy || copy.paid_by || 'Mandal';
     copy.image_url = img;
+    delete copy.image;
     delete copy.paidBy;
   }
   if (type === 'event') {
-    copy.image = img;
     copy.image_url = img;
+    delete copy.image;
     if (row.date) {
       let d = new Date(row.date);
       if (!isNaN(d.getTime())) copy.date = d.toISOString();
@@ -433,7 +433,7 @@ function toCloud(type, row) {
   }
   if (type === 'alankar') {
     copy.image = img;
-    copy.image_url = img;
+    delete copy.image_url;
   }
   delete copy.created_at;
   copy.mandal_id = currentMandal.id;
@@ -854,11 +854,14 @@ async function submitDocForm(ev, id) {
   let list = db.documents || [];
   let existing = id ? list.find(x => String(x.id) === String(id)) : null;
 
+  showLoader('कागदपत्र सेव्ह होत आहे... (Saving document...)');
+
   let file = f.get('image');
   if (file && file.size) {
     let isPdf = file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'));
     if (isPdf) {
       if (file.size > 10 * 1024 * 1024) {
+        hideLoader();
         toast('कृपया 10MB पेक्षा लहान PDF निवडा (Please choose PDF under 10MB)');
         return;
       }
@@ -890,9 +893,6 @@ async function submitDocForm(ev, id) {
   }
   db.documents = list;
   save();
-  closeModal();
-  toast('Official document saved successfully! (कागदपत्र जतन झाले)');
-  render();
 
   // Sync document to Supabase cloud
   if (cloud) {
@@ -914,12 +914,16 @@ async function submitDocForm(ev, id) {
       let { error } = await cloud.from('documents').upsert(docPayload);
       if (error && error.code !== 'PGRST205') {
         console.warn('Doc cloud upsert error:', error.message || error);
-        toast('कागदपत्र स्थानिक सेव्ह झाले (Cloud sync warning)');
       }
     } catch(err) {
       console.warn('Doc cloud sync exception:', err);
     }
   }
+
+  hideLoader();
+  closeModal();
+  toast('✅ अधिकृत कागदपत्र जतन झाले! (Saved successfully)');
+  render();
 }
 
 /* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD */
@@ -2155,31 +2159,40 @@ async function submitForm(ev, type, id) {
 
   if (type === 'aarti') { if (!o.time) { o.time = o.type === 'Morning' ? (db.settings?.morningAartiTime || '09:00') : (db.settings?.eveningAartiTime || '20:00'); } }
   if (['donation', 'expense'].includes(type)) o.amount = Number(o.amount);
-  
+
+  if (type === 'expense') {
+    showLoader('खर्च नोंदवला जात आहे... (Saving Expense...)');
+  } else if (type === 'donation') {
+    showLoader('देणगी नोंदवली जात आहे... (Saving Donation...)');
+  } else {
+    showLoader('माहिती सेव्ह होत आहे... (Saving...)');
+  }
+
   let file = f.get('image');
   if (file && file.size) {
-    let isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    let isPdf = file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'));
     if (isPdf) {
       if (file.size > 8 * 1024 * 1024) {
+        hideLoader();
         toast('कृपया 8MB पेक्षा लहान PDF निवडा (Please choose PDF under 8MB)');
         return;
       }
       o.image = await readFileAsDataUrl(file);
-      saveItem(type, id, o);
+      await saveItem(type, id, o);
     } else if (file.type && file.type.startsWith('image/')) {
       o.image = await compressImage(file, 1400, 0.82);
-      saveItem(type, id, o);
+      await saveItem(type, id, o);
     } else {
       let list = db[listName[type]];
       let existingItem = id && list ? list.find(x => String(x.id) === String(id)) : null;
       o.image = (existingItem && hasValidImage(existingItem.image)) ? existingItem.image : '';
-      saveItem(type, id, o);
+      await saveItem(type, id, o);
     }
   } else {
     let list = db[listName[type]];
     let existingItem = id && list ? list.find(x => String(x.id) === String(id)) : null;
     o.image = (existingItem && hasValidImage(existingItem.image)) ? existingItem.image : '';
-    saveItem(type, id, o);
+    await saveItem(type, id, o);
   }
 }
 
@@ -2196,12 +2209,59 @@ async function saveItem(type, id, o) {
     list.unshift(o);
   }
   save();
-  toast('Saved successfully');
+  render();
 
-  if (type === 'donation') {
-    openReceiptModal(o.id);
+  let syncFailed = false;
+  if (cloud) {
+    let isCloudId = id && String(id).includes('-');
+    let payload = toCloud(type, o);
+
+    try {
+      let query = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
+      let { data, error } = await query;
+
+      // Smart retry: if 'phone' column hasn't been added to Supabase donations table yet, retry without 'phone'
+      if (error && error.code === 'PGRST204' && type === 'donation' && 'phone' in payload) {
+        delete payload.phone;
+        let retryQuery = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
+        let res = await retryQuery;
+        data = res.data;
+        error = res.error;
+      }
+
+      if (error) {
+        if (error.code !== 'PGRST205') {
+          syncFailed = true;
+          console.warn('Supabase Error:', error);
+        }
+      }
+
+      if (data) {
+        let updated = fromCloud(type, data);
+        let localIndex = list.findIndex(x => String(x.id) === String(o.id));
+        if (localIndex >= 0) list[localIndex] = updated;
+        save();
+        render();
+      }
+    } catch (err) {
+      syncFailed = true;
+      console.warn('Save item cloud sync error:', err);
+    }
+  }
+
+  hideLoader();
+  closeModal();
+
+  if (syncFailed) {
+    toast('⚠️ स्थानिक सेव्ह झाले (Cloud sync error)');
   } else {
-    closeModal();
+    if (type === 'donation') {
+      openReceiptModal(o.id);
+    } else if (type === 'expense') {
+      toast('✅ खर्च नोंद यशस्वी! (Expense registered successfully)');
+    } else {
+      toast('✅ यशस्वीरीत्या जतन झाले! (Saved successfully)');
+    }
   }
 
   if (type === 'event') {
@@ -2214,41 +2274,6 @@ async function saveItem(type, id, o) {
         if (p === 'granted') sendLocalNotification(notifTitle, notifBody);
       });
     }
-  }
-
-  if (!cloud) return;
-  let isCloudId = id && String(id).includes('-');
-  let payload = toCloud(type, o);
-
-  try {
-    let query = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
-    let { data, error } = await query;
-
-    // Smart retry: if 'phone' column hasn't been added to Supabase donations table yet, retry without 'phone'
-    if (error && error.code === 'PGRST204' && type === 'donation' && 'phone' in payload) {
-      delete payload.phone;
-      let retryQuery = isCloudId ? cloud.from(tableName[type]).update(payload).eq('id', id).select().single() : cloud.from(tableName[type]).insert(payload).select().single();
-      let res = await retryQuery;
-      data = res.data;
-      error = res.error;
-    }
-
-    if (error) {
-      if (error.code === 'PGRST205') return;
-      toast('Saved locally, but cloud sync failed.');
-      console.warn('Supabase Error:', error);
-      return;
-    }
-
-    if (data) {
-      let updated = fromCloud(type, data);
-      let localIndex = list.findIndex(x => String(x.id) === String(o.id));
-      if (localIndex >= 0) list[localIndex] = updated;
-      save();
-      loadCloud(); // Trigger sync across devices
-    }
-  } catch (err) {
-    console.warn('Save item cloud sync error:', err);
   }
 }
 
@@ -2872,12 +2897,35 @@ function exportCSV() {
   toast('CSV report downloaded');
 }
 
-function toast(t) {
+function toast(t, duration = 2400) {
   let el = document.getElementById('toast');
   if (!el) return;
   el.textContent = t;
   el.className = 'toast show';
-  setTimeout(() => el.className = 'toast', 2400);
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.className = 'toast', duration);
+}
+
+function showLoader(msg = 'कृपया प्रतीक्षा करा... (Please wait)') {
+  let el = document.getElementById('appLoader');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'appLoader';
+    el.className = 'app-loader-overlay';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div class="app-loader-card">
+      <div class="app-spinner"></div>
+      <div class="app-loader-text">${escapeHtml(msg)}</div>
+    </div>
+  `;
+  el.classList.add('show');
+}
+
+function hideLoader() {
+  let el = document.getElementById('appLoader');
+  if (el) el.classList.remove('show');
 }
 
 
