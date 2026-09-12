@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v20';
+const DATA_VERSION = '2026-mandal-prod-v21';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -352,17 +352,21 @@ function getCleanWhatsAppDigits(phone) {
   return '91' + digits;
 }
 
+function currentDateTimeLocal() {
+  let now = new Date();
+  let y = now.getFullYear();
+  let m = String(now.getMonth() + 1).padStart(2, '0');
+  let d = String(now.getDate()).padStart(2, '0');
+  let h = String(now.getHours()).padStart(2, '0');
+  let min = String(now.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d}T${h}:${min}`;
+}
+
 function formatDateTimeLocal(dateStr) {
-  if (!dateStr) {
-    let now = new Date();
-    let y = now.getFullYear();
-    let m = String(now.getMonth() + 1).padStart(2, '0');
-    let d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}T19:00`;
-  }
+  if (!dateStr) return currentDateTimeLocal();
   if (dateStr.length === 16 && dateStr.includes('T')) return dateStr;
   let d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr.slice(0, 16);
+  if (isNaN(d.getTime())) return currentDateTimeLocal();
   let y = d.getFullYear();
   let m = String(d.getMonth() + 1).padStart(2, '0');
   let day = String(d.getDate()).padStart(2, '0');
@@ -2103,7 +2107,7 @@ function openForm(type, item = null) {
     `,
     event: `
       <div class="field full"><label>Title / Announcement Name</label><input name="title" required value="${escapeHtml(x.title || '')}" placeholder="e.g. भजन संध्या किंवा महाप्रसाद"></div>
-      <div class="field full"><label>Date & Time (तारीख व वेळ)</label><input name="date" type="datetime-local" required value="${formatDateTimeLocal(x.date)}"></div>
+      <div class="field full"><label>Date & Time (तारीख व वेळ)</label><input name="date" type="datetime-local" required min="${currentDateTimeLocal()}" value="${formatDateTimeLocal(x.date)}"></div>
       <div class="field full"><label>Description / Details</label><textarea name="description" placeholder="कार्यक्रमाची संपूर्ण माहिती…">${escapeHtml(x.description || '')}</textarea></div>
       <div class="field full"><label>Event image (optional)</label><input name="image" type="file" accept="image/*"></div>
     `,
@@ -2175,6 +2179,23 @@ async function submitForm(ev, type, id) {
     }
     if (!o.description || !o.description.trim()) {
       toast('कृपया खर्च तपशील प्रविष्ट करा (Please enter description)');
+      return;
+    }
+  }
+
+  if (type === 'event') {
+    if (!o.title || !o.title.trim()) {
+      toast('कृपया कार्यक्रमाचे नाव / शीर्षक प्रविष्ट करा (Please enter title)');
+      return;
+    }
+    if (!o.date) {
+      toast('कृपया तारीख व वेळ निवडा (Please select date & time)');
+      return;
+    }
+    let eventTime = new Date(o.date).getTime();
+    let nowTime = Date.now();
+    if (isNaN(eventTime) || eventTime < (nowTime - 60000)) {
+      toast('⚠️ मागील तारीख किंवा उलटून गेलेली वेळ निवडता येणार नाही (Cannot select past date or time)');
       return;
     }
   }
