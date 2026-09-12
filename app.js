@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v17';
+const DATA_VERSION = '2026-mandal-prod-v18';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -464,17 +464,6 @@ function sortEventsChronological(list) {
   });
 }
 
-/* ── Light column selects for background polling (no base64 image data) ── */
-const pollSelect = {
-  donation:  '*',
-  expense:   'id,mandal_id,date,description,category,paid_by,amount,outward_no,status,note,created_at',
-  aarti:     '*',
-  event:     'id,mandal_id,title,description,date,category,created_at',
-  contact:   '*',
-  alankar:   'id,mandal_id,date,title,type,note,created_at',
-  document:  'id,mandal_id,title,category,icon,outward_no,issued_by,valid_from,valid_until,status,note,created_at'
-};
-
 /* ── Fingerprint to detect real changes before re-rendering ─────── */
 let _lastCloudFp = '';
 function _cloudFingerprint() {
@@ -491,26 +480,14 @@ async function loadCloud() {
   let updatedAny = false;
   await Promise.allSettled(types.map(async (type) => {
     try {
-      // Use light select during background polling — avoids re-downloading all base64 images
-      let { data, error } = await cloud.from(tableName[type]).select(pollSelect[type]).eq('mandal_id', currentMandal.id);
+      let { data, error } = await cloud.from(tableName[type]).select('*').eq('mandal_id', currentMandal.id);
       if (error) {
         if (error.code === 'PGRST205') return;
         console.warn(`Supabase ${type} fetch error:`, error.message);
         return;
       }
       if (Array.isArray(data)) {
-        let cloudRows = data.map(row => {
-          let mapped = fromCloud(type, row);
-          // Preserve cached image for existing records (avoids losing photo on light fetch)
-          if (['expense', 'event', 'alankar', 'document'].includes(type) && !hasValidImage(mapped.image)) {
-            let cached = (db[listName[type]] || []).find(x => String(x.id) === String(mapped.id));
-            if (cached && hasValidImage(cached.image)) {
-              mapped.image     = cached.image;
-              mapped.image_url = cached.image_url;
-            }
-          }
-          return mapped;
-        });
+        let cloudRows = data.map(row => fromCloud(type, row));
         if (cloudRows.length > 0) {
           db[listName[type]] = cloudRows;
           updatedAny = true;
