@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v22';
+const DATA_VERSION = '2026-mandal-prod-v23';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -481,7 +481,21 @@ function fromCloud(type, row) {
     image: img,
     image_url: img
   };
-  if (type === 'alankar') return { ...row, image: img, image_url: img };
+  if (type === 'alankar') {
+    // alankar table has no title column — title was stored in note as "title — note"
+    // Reconstruct title from note for display purposes
+    let rawNote = row.note || '';
+    let parsedTitle = '';
+    let parsedNote = rawNote;
+    if (rawNote.includes(' — ')) {
+      let parts = rawNote.split(' — ');
+      parsedTitle = parts[0].trim();
+      parsedNote = parts.slice(1).join(' — ').trim();
+    } else {
+      parsedTitle = rawNote; // fallback: use note as title if no separator
+    }
+    return { ...row, image: img, image_url: img, title: parsedTitle, note: parsedNote };
+  }
   return row;
 }
 
@@ -524,8 +538,13 @@ function toCloud(type, row) {
     delete copy.validUntil;
   }
   if (type === 'alankar') {
+    // alankar table columns: id, mandal_id, date, type, note, image, created_at
+    // — NO title column, NO image_url column
+    // id MUST be preserved — alankar uses explicit string IDs, not auto-gen UUIDs
+    copy.id = row.id;
     copy.image = img;
     delete copy.image_url;
+    delete copy.title; // no 'title' column in alankar table
   }
   delete copy.created_at;
   copy.mandal_id = currentMandal.id;
@@ -1933,7 +1952,7 @@ function previewMultiInput(input) {
 async function submitAlankarForm(ev) {
   ev.preventDefault();
   let f = new FormData(ev.target);
-  let title = f.get('title');
+  let title = f.get('title') || '';
   let date = f.get('date') || today;
   let note = f.get('note') || '';
   let input = ev.target.querySelector('input[type="file"]');
@@ -1941,25 +1960,67 @@ async function submitAlankarForm(ev) {
 
   if (!files.length) return toast('Please select at least one photo');
 
-  toast(`Uploading ${files.length} photo(s)…`);
+  // Combine title + note for the note field (since alankar table has no title column)
+  let combinedNote = title ? (note ? `${title} — ${note}` : title) : note;
+
+  showLoader(`Uploading ${files.length} photo(s)… please wait`);
+  let successCount = 0, failCount = 0;
+
   for (let file of files) {
     let compressedUrl = await compressImage(file, 1000, 0.75);
+    let itemId = 'k' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100);
     let item = {
-      id: 'k' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100),
-      title: title,
+      id: itemId,
+      title: title,       // kept locally for display in gallery
       date: date,
-      note: note,
+      note: combinedNote, // stored in DB note column (includes title)
       image: compressedUrl
     };
     db.alankar.unshift(item);
+    save();
+
     if (cloud) {
-      cloud.from('alankar').insert(toCloud('alankar', item)).then(() => {}).catch(err => console.warn(err));
+      try {
+        let payload = toCloud('alankar', item);
+        let { data, error } = await cloud.from('alankar').upsert(payload, { onConflict: 'id' }).select().single();
+        if (error) {
+          console.warn('Alankar cloud sync error:', error);
+          failCount++;
+        } else {
+          // Update local item with confirmed cloud data
+          if (data) {
+            let idx = db.alankar.findIndex(x => x.id === itemId);
+            if (idx >= 0) {
+              db.alankar[idx] = fromCloud('alankar', data);
+              // Restore title locally (not in DB) for display purposes
+              db.alankar[idx].title = title;
+            }
+          }
+          successCount++;
+        }
+      } catch (err) {
+        console.warn('Alankar upload error:', err);
+        failCount++;
+      }
+    } else {
+      successCount++;
     }
   }
+
   save();
+  render();
+  hideLoader();
   closeModal();
-  toast(`${files.length} Bappa photo(s) uploaded!`);
+
+  if (failCount === 0) {
+    toast(`✅ मुखदर्शन फोटो यशस्वीरीत्या जतन झाले! (${successCount} photo(s) saved successfully)`);
+  } else if (successCount === 0) {
+    toast(`⚠️ फोटो सेव्ह होऊ शकले नाहीत — Cloud sync error. (${failCount} photo(s) failed)`);
+  } else {
+    toast(`⚠️ ${successCount} saved, ${failCount} failed — Check your internet connection.`);
+  }
 }
+
 
 /* One-Click Executive Audit Report Bundle Generator */
 function openAuditReportBundle() {
