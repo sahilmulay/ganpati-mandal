@@ -6,7 +6,7 @@ const CLOUD_CONFIG = {
   url: 'https://wrvvnqanjtrmmltoaxvg.supabase.co',
   publishableKey: 'sb_publishable_1isjm1Z4wAtnI0pdzGpmIg_Yc0Q7KSw'
 };
-const cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
+let cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
 
 /* ── Multi-Mandal Auth Session ─────────────────────────────────────────────── */
 // currentMandal is populated from sessionStorage after login.
@@ -272,7 +272,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v23';
+const DATA_VERSION = '2026-mandal-prod-v24';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
 if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -3195,11 +3195,43 @@ async function loadPublicMandalData() {
     if (target) target.innerHTML = publicPortalLanding();
     return;
   }
-  if (!cloud) return;
+
+  // Show a loading indicator immediately so users see something
+  let target = document.getElementById('page');
+  if (target) {
+    target.innerHTML = `
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:16px; padding:32px; text-align:center;">
+        <div style="font-size:48px; animation:appSpin 1.2s linear infinite; display:inline-block;">🪷</div>
+        <div style="font-size:18px; font-weight:700; color:#9f2e20;">श्री गणेशाय नमः</div>
+        <div style="font-size:14px; color:#7a5c55;">माहिती लोड होत आहे… (Loading data…)</div>
+      </div>`;
+  }
+
+  // Wait for Supabase SDK to be ready (CDN might load after app.js on first visit)
+  let retries = 0;
+  while (!cloud && retries < 20) {
+    await new Promise(r => setTimeout(r, 250));
+    if (window.supabase) {
+      cloud = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
+    }
+    retries++;
+  }
+
+  if (!cloud) {
+    if (target) target.innerHTML = `
+      <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
+        <div class="card" style="padding:32px 20px;">
+          <div style="font-size:48px; margin-bottom:12px;">📡</div>
+          <h3 style="color:#8b1c12;">इंटरनेट कनेक्शन तपासा</h3>
+          <p style="color:#6e584f; font-size:14px;">माहिती लोड होऊ शकली नाही. कृपया इंटरनेट कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.<br><br>Could not connect. Please check your internet and <a href="" style="color:#9f2e20;">refresh the page</a>.</p>
+        </div>
+      </div>`;
+    return;
+  }
+
   try {
     let { data, error } = await cloud.from('mandals').select('id,slug,name,city,contact_phone,nondani_no').eq('slug', slug.toLowerCase()).single();
     if (error || !data) {
-      let target = document.getElementById('page');
       if (target) {
         target.innerHTML = `
           <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
@@ -3218,15 +3250,25 @@ async function loadPublicMandalData() {
     sessionStorage.setItem('mandal_slug',  data.slug);
     sessionStorage.setItem('mandal_name',  data.name);
     sessionStorage.setItem('mandal_city',  data.city);
-    sessionStorage.setItem('mandal_phone', data.contact_phone);
-    sessionStorage.setItem('mandal_nondani', data.nondani_no);
+    sessionStorage.setItem('mandal_phone', data.contact_phone || '');
+    sessionStorage.setItem('mandal_nondani', data.nondani_no || '');
     document.title = 'श्री गणेश उत्सव - ' + data.name;
 
     // Reset local db memory to completely empty before loading cloud data
     db = { donations: [], expenses: [], aartis: [], events: [], contacts: [], alankar: [], documents: [], settings: seed.settings };
     await loadCloud();
     render();
-  } catch(e) { console.warn('Public portal mandal load error:', e); }
+  } catch(e) {
+    console.warn('Public portal mandal load error:', e);
+    if (target) target.innerHTML = `
+      <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
+        <div class="card" style="padding:32px 20px;">
+          <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
+          <h3 style="color:#8b1c12;">काहीतरी चुकले (Error)</h3>
+          <p style="color:#6e584f; font-size:14px;">माहिती लोड करताना त्रुटी आली. पुन्हा प्रयत्न करा.<br><a href="" style="color:#9f2e20;">Refresh the page</a></p>
+        </div>
+      </div>`;
+  }
 }
 
 /* Event listeners & Single-Run App Initializer */
