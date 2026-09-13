@@ -1,6 +1,23 @@
+/* Safe storage wrappers to prevent crashes in private browsing, incognito, or restricted WebViews */
+function safeSessionGet(key) {
+  try { return window.sessionStorage ? window.sessionStorage.getItem(key) : null; } catch(e) { return null; }
+}
+function safeSessionSet(key, val) {
+  try { if (window.sessionStorage) window.sessionStorage.setItem(key, val); } catch(e) {}
+}
+function safeLocalGet(key) {
+  try { return window.localStorage ? window.localStorage.getItem(key) : null; } catch(e) { return null; }
+}
+function safeLocalSet(key, val) {
+  try { if (window.localStorage) window.localStorage.setItem(key, val); } catch(e) {}
+}
+function safeLocalRemove(key) {
+  try { if (window.localStorage) window.localStorage.removeItem(key); } catch(e) {}
+}
+
 /* Set FINANCIAL_PIN_HASH and optional cloud adapter values before sharing externally. */
 // PIN hash is now dynamic — loaded from mandals table after login
-function getFinancialPinHash() { return sessionStorage.getItem('mandal_pin_hash') || '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; }
+function getFinancialPinHash() { return safeSessionGet('mandal_pin_hash') || '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; }
 
 const CLOUD_CONFIG = {
   url: 'https://wrvvnqanjtrmmltoaxvg.supabase.co',
@@ -9,25 +26,30 @@ const CLOUD_CONFIG = {
 let cloud = window.supabase?.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
 
 /* ── Multi-Mandal Auth Session ─────────────────────────────────────────────── */
-// currentMandal is populated from sessionStorage after login.
-// On public.html it is loaded by slug from URL param instead.
+// In-memory active mandal fallback if sessionStorage is blocked
+let _activeMandal = null;
+
 const currentMandal = {
-  get id()       { return sessionStorage.getItem('mandal_id')       || '00000000-0000-0000-0000-000000000001'; },
-  get slug()     { return sessionStorage.getItem('mandal_slug')     || 'vrindavan'; },
-  get name()     { return sessionStorage.getItem('mandal_name')     || 'वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ'; },
-  get city()     { return sessionStorage.getItem('mandal_city')     || 'Kavlapur, Miraj, Sangli'; },
-  get phone()    { return sessionStorage.getItem('mandal_phone')    || ''; },
-  get nondani()  { return sessionStorage.getItem('mandal_nondani')  || 'महा/220/14'; },
-  get pin_hash() { return sessionStorage.getItem('mandal_pin_hash') || '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; },
-  get passHash() { return sessionStorage.getItem('mandal_pass_hash') || ''; }
+  get id()       { return _activeMandal?.id || safeSessionGet('mandal_id')       || '00000000-0000-0000-0000-000000000001'; },
+  get slug()     { return _activeMandal?.slug || safeSessionGet('mandal_slug')     || 'vrindavan'; },
+  get name()     { return _activeMandal?.name || safeSessionGet('mandal_name')     || 'वृंदावन कला, क्रीडा व सांस्कृतिक मंडळ'; },
+  get city()     { return _activeMandal?.city || safeSessionGet('mandal_city')     || 'Kavlapur, Miraj, Sangli'; },
+  get phone()    { return _activeMandal?.phone || safeSessionGet('mandal_phone')    || ''; },
+  get nondani()  { return _activeMandal?.nondani || safeSessionGet('mandal_nondani')  || 'महा/220/14'; },
+  get pin_hash() { return _activeMandal?.pin_hash || safeSessionGet('mandal_pin_hash') || '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; },
+  get passHash() { return _activeMandal?.pass_hash || safeSessionGet('mandal_pass_hash') || ''; }
 };
 
 /* Auth guard — redirect to login if no session (skip on login.html and public.html) */
 (function authGuard() {
-  let path = (window.location.pathname || '').toLowerCase();
-  let isPublic = path.includes('public.html') || path.includes('login.html');
-  if (!isPublic && !sessionStorage.getItem('mandal_id')) {
-    window.location.href = 'login.html';
+  try {
+    let path = (window.location.pathname || '').toLowerCase();
+    let isPublic = path.includes('public') || path.includes('login');
+    if (!isPublic && !safeSessionGet('mandal_id')) {
+      window.location.href = 'login.html';
+    }
+  } catch(e) {
+    console.warn('Auth guard note:', e);
   }
 })();
 
@@ -272,14 +294,22 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v24';
-const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (sessionStorage.getItem('mandal_id') || 'default');
-if (localStorage.getItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default')) !== DATA_VERSION) {
-  localStorage.removeItem(LOCAL_STORAGE_KEY);
-  localStorage.setItem('mandal-data-version-' + (sessionStorage.getItem('mandal_id') || 'default'), DATA_VERSION);
-}
+const DATA_VERSION = '2026-mandal-prod-v26';
+const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
+try {
+  let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
+  if (storedVer !== DATA_VERSION) {
+    safeLocalRemove(LOCAL_STORAGE_KEY);
+    safeLocalSet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'), DATA_VERSION);
+  }
+} catch(e) {}
 
-let db = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || 'null') || seed;
+let db = null;
+try {
+  let raw = safeLocalGet(LOCAL_STORAGE_KEY);
+  if (raw) db = JSON.parse(raw);
+} catch(e) {}
+if (!db || typeof db !== 'object') db = JSON.parse(JSON.stringify(seed));
 if (!db.alankar) db.alankar = [];
 if (!db.documents) db.documents = [];
 if (!db.donations) db.donations = [];
@@ -633,7 +663,13 @@ async function loadCloud() {
 
   if (updatedAny) {
     let newFp = _cloudFingerprint();
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
+    if (detectCurrentPage() !== 'public') {
+      try {
+        safeLocalSet(LOCAL_STORAGE_KEY, JSON.stringify(db));
+      } catch (quotaErr) {
+        console.warn('localStorage quota note:', quotaErr.message || quotaErr);
+      }
+    }
     if (newFp !== _lastCloudFp) {
       _lastCloudFp = newFp;
       render(); // Only re-render if record counts or IDs actually changed
@@ -1253,15 +1289,15 @@ function publicView() {
           ${contactsList.map(c => `
             <div class="public-contact-card">
               <div class="public-contact-header">
-                <div class="public-contact-avatar">${escapeHtml(c.name.split(' ').map(x => x[0]).slice(0, 2).join(''))}</div>
+                <div class="public-contact-avatar">${escapeHtml(((c.name || '').split(' ').filter(Boolean).map(x => x[0]).slice(0, 2).join('')) || '👤')}</div>
                 <div class="public-contact-info">
-                  <strong>${escapeHtml(c.name)}</strong>
-                  <span>${escapeHtml(c.role)}</span>
-                  <span class="contact-phone">📱 ${escapeHtml(c.phone)}</span>
+                  <strong>${escapeHtml(c.name || '')}</strong>
+                  <span>${escapeHtml(c.role || '')}</span>
+                  <span class="contact-phone">📱 ${escapeHtml(c.phone || '')}</span>
                 </div>
               </div>
               <div class="contact-btn-group">
-                <a href="tel:${escapeHtml(c.phone)}" class="btn-call">📞 Call</a>
+                <a href="tel:${escapeHtml(c.phone || '')}" class="btn-call">📞 Call</a>
                 <a href="https://api.whatsapp.com/send?phone=91${(c.phone || '').replace(/\D/g, '')}&text=${encodeURIComponent('॥ श्री गणेशाय नमः ॥ नमस्कार, ' + currentMandal.name + ' संदर्भात संपर्क करत आहे.')}" target="_blank" class="btn-wa">💬 WhatsApp</a>
               </div>
             </div>
@@ -3186,7 +3222,7 @@ async function loadPublicMandalData() {
   let params = new URLSearchParams(window.location.search);
   let slug = params.get('mandal');
   if (!slug) {
-    let loggedSlug = sessionStorage.getItem('mandal_slug');
+    let loggedSlug = safeSessionGet('mandal_slug');
     if (loggedSlug) {
       window.location.replace('public.html?mandal=' + encodeURIComponent(loggedSlug));
       return;
@@ -3196,7 +3232,7 @@ async function loadPublicMandalData() {
     return;
   }
 
-  // Show a loading indicator immediately so users see something
+  // Show a loading indicator immediately so visitors see smooth feedback
   let target = document.getElementById('page');
   if (target) {
     target.innerHTML = `
@@ -3207,67 +3243,108 @@ async function loadPublicMandalData() {
       </div>`;
   }
 
-  // Wait for Supabase SDK to be ready (CDN might load after app.js on first visit)
-  let retries = 0;
-  while (!cloud && retries < 20) {
-    await new Promise(r => setTimeout(r, 250));
-    if (window.supabase) {
-      cloud = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.publishableKey);
+  // 1. Fetch mandal metadata (Cloud client with automatic direct REST API fallback)
+  let mandalData = null;
+  const restHeaders = {
+    'apikey': CLOUD_CONFIG.publishableKey,
+    'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey
+  };
+
+  // Try Supabase JS client if available
+  if (cloud) {
+    try {
+      let { data, error } = await cloud.from('mandals').select('id,slug,name,city,contact_phone,nondani_no').eq('slug', slug.toLowerCase()).maybeSingle();
+      if (!error && data) mandalData = data;
+    } catch(e) {
+      console.warn('Cloud SDK mandal lookup error, falling back to REST:', e);
     }
-    retries++;
   }
 
-  if (!cloud) {
-    if (target) target.innerHTML = `
-      <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
-        <div class="card" style="padding:32px 20px;">
-          <div style="font-size:48px; margin-bottom:12px;">📡</div>
-          <h3 style="color:#8b1c12;">इंटरनेट कनेक्शन तपासा</h3>
-          <p style="color:#6e584f; font-size:14px;">माहिती लोड होऊ शकली नाही. कृपया इंटरनेट कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.<br><br>Could not connect. Please check your internet and <a href="" style="color:#9f2e20;">refresh the page</a>.</p>
-        </div>
-      </div>`;
+  // Fallback: direct REST API call (works even without Supabase SDK or on strict mobile networks)
+  if (!mandalData) {
+    try {
+      let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/mandals?select=id,slug,name,city,contact_phone,nondani_no&slug=eq.${encodeURIComponent(slug.toLowerCase())}`, { headers: restHeaders });
+      if (res.ok) {
+        let rows = await res.json();
+        if (Array.isArray(rows) && rows.length > 0) mandalData = rows[0];
+      }
+    } catch(restErr) {
+      console.warn('REST API mandal lookup error:', restErr);
+    }
+  }
+
+  if (!mandalData) {
+    if (target) {
+      target.innerHTML = `
+        <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
+          <div class="card" style="padding:32px 20px;">
+            <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
+            <h3 style="color:#8b1c12;">मंडळ सापडले नाही (Mandal Not Found)</h3>
+            <p style="color:#6e584f; font-size:14px;">"${escapeHtml(slug)}" नावाचे कोणतेही मंडळ नोंदणीकृत नाही.</p>
+            <a href="public.html" class="primary-btn" style="display:inline-block; margin-top:14px; text-decoration:none;">इतर मंडळ शोधा</a>
+          </div>
+        </div>`;
+    }
     return;
   }
 
-  try {
-    let { data, error } = await cloud.from('mandals').select('id,slug,name,city,contact_phone,nondani_no').eq('slug', slug.toLowerCase()).single();
-    if (error || !data) {
-      if (target) {
-        target.innerHTML = `
-          <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
-            <div class="card" style="padding:32px 20px;">
-              <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
-              <h3 style="color:#8b1c12;">मंडळ सापडले नाही (Mandal Not Found)</h3>
-              <p style="color:#6e584f; font-size:14px;">"${escapeHtml(slug)}" नावाचे कोणतेही मंडळ नोंदणीकृत नाही.</p>
-              <a href="public.html" class="primary-btn" style="display:inline-block; margin-top:14px; text-decoration:none;">इतर मंडळ शोधा</a>
-            </div>
-          </div>
-        `;
-      }
-      return;
-    }
-    sessionStorage.setItem('mandal_id',    data.id);
-    sessionStorage.setItem('mandal_slug',  data.slug);
-    sessionStorage.setItem('mandal_name',  data.name);
-    sessionStorage.setItem('mandal_city',  data.city);
-    sessionStorage.setItem('mandal_phone', data.contact_phone || '');
-    sessionStorage.setItem('mandal_nondani', data.nondani_no || '');
-    document.title = 'श्री गणेश उत्सव - ' + data.name;
+  // 2. Set active mandal in memory and safely in session storage
+  _activeMandal = {
+    id: mandalData.id,
+    slug: mandalData.slug,
+    name: mandalData.name,
+    city: mandalData.city,
+    phone: mandalData.contact_phone || '',
+    nondani: mandalData.nondani_no || ''
+  };
 
-    // Reset local db memory to completely empty before loading cloud data
-    db = { donations: [], expenses: [], aartis: [], events: [], contacts: [], alankar: [], documents: [], settings: seed.settings };
-    await loadCloud();
+  safeSessionSet('mandal_id',      mandalData.id);
+  safeSessionSet('mandal_slug',    mandalData.slug);
+  safeSessionSet('mandal_name',    mandalData.name);
+  safeSessionSet('mandal_city',    mandalData.city);
+  safeSessionSet('mandal_phone',   mandalData.contact_phone || '');
+  safeSessionSet('mandal_nondani', mandalData.nondani_no || '');
+  document.title = 'श्री गणेश उत्सव - ' + mandalData.name;
+
+  // 3. Reset local memory to clean state for this mandal
+  db = { donations: [], expenses: [], aartis: [], events: [], contacts: [], alankar: [], documents: [], settings: seed.settings };
+
+  // 4. Load table data
+  try {
+    if (cloud) {
+      await loadCloud();
+    } else {
+      // Fallback: direct REST API loader for each table
+      let types = Object.keys(tableName);
+      await Promise.allSettled(types.map(async (type) => {
+        let r = await fetch(`${CLOUD_CONFIG.url}/rest/v1/${tableName[type]}?select=*&mandal_id=eq.${encodeURIComponent(mandalData.id)}`, { headers: restHeaders });
+        if (r.ok) {
+          let rows = await r.json();
+          if (Array.isArray(rows)) {
+            db[listName[type]] = rows.map(row => fromCloud(type, row));
+          }
+        }
+      }));
+    }
+  } catch(dataErr) {
+    console.warn('Data load note (continuing to render):', dataErr);
+  }
+
+  // 5. Render public view safely
+  try {
     render();
-  } catch(e) {
-    console.warn('Public portal mandal load error:', e);
-    if (target) target.innerHTML = `
-      <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
-        <div class="card" style="padding:32px 20px;">
-          <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
-          <h3 style="color:#8b1c12;">काहीतरी चुकले (Error)</h3>
-          <p style="color:#6e584f; font-size:14px;">माहिती लोड करताना त्रुटी आली. पुन्हा प्रयत्न करा.<br><a href="" style="color:#9f2e20;">Refresh the page</a></p>
-        </div>
-      </div>`;
+  } catch(renderErr) {
+    console.error('Public portal render error:', renderErr);
+    if (target) {
+      target.innerHTML = `
+        <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
+          <div class="card" style="padding:32px 20px;">
+            <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
+            <h3 style="color:#8b1c12;">Display Error</h3>
+            <p style="color:#6e584f; font-size:14px;">माहिती लोड करताना त्रुटी आली. कृपया <a href="" style="color:#9f2e20;">Refresh करा</a>.<br><small>${renderErr && renderErr.message ? escapeHtml(renderErr.message) : ''}</small></p>
+          </div>
+        </div>`;
+    }
   }
 }
 
