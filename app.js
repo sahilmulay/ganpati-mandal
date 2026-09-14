@@ -294,7 +294,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v26';
+const DATA_VERSION = '2026-mandal-prod-v27';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -1142,11 +1142,11 @@ function publicView() {
         <div style="padding:8px 14px; font-size:12px;">
           <div style="margin-bottom:6px;">
             <span style="color:#8b261e; font-weight:700;">🌅 सकाळ (${time12(db.settings?.morningAartiTime || '09:00')}):</span>
-            ${morningAartis.length ? morningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध</span>'}
+            ${morningAartis.length ? morningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध नाही</span>'}
           </div>
           <div>
             <span style="color:#8b261e; font-weight:700;">🌆 सायंकाळ (${time12(db.settings?.eveningAartiTime || '20:00')}):</span>
-            ${eveningAartis.length ? eveningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध</span>'}
+            ${eveningAartis.length ? eveningAartis.map(a => `<span style="font-weight:700; margin-left:6px; color:#2c1b18;">👤 ${escapeHtml(a.person)}</span>`).join(', ') : '<span style="color:#8c7166; font-style:italic; margin-left:6px;">मानकरी उपलब्ध नाही</span>'}
           </div>
         </div>
       </div>
@@ -1213,10 +1213,16 @@ function publicView() {
       <!-- Section 4: Transparency Financial Ledgers -->
       <div class="layout-split" style="margin-bottom:20px;">
         <div class="card">
-          <div class="card-title"><h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3></div>
-          ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody>${donationRows || '<tr><td colspan="4" class="empty">अद्याप देणगी नोंद नाही</td></tr>'}</tbody>`)}
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3>
+            <span style="font-size:12px; color:#8b261e; font-weight:700;">एकूण: ${sortedDonations.length}</span>
+          </div>
+          <div style="margin:10px 0 12px 0;">
+            <input id="publicDonationSearch" type="search" class="search" placeholder="🔍 देणगीदार किंवा रक्कम शोधा (Search by name or amount e.g. 500, Rahul)…" oninput="filterPublicDonations(this)" style="width:100%; box-sizing:border-box; padding:10px 14px; border:1px solid #e0cdc0; border-radius:10px; font-size:13px; background:#fffdfa;">
+          </div>
+          ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody id="publicDonationRows">${donationRows || '<tr><td colspan="4" class="empty">अद्याप देणगी नोंद नाही</td></tr>'}</tbody>`)}
           ${sortedDonations.length > 4 ? `
-            <div style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px dashed #e8d5c4;">
+            <div id="publicDonationToggleWrap" style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px dashed #e8d5c4;">
               <button id="publicDonationToggleBtn" class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="togglePublicDonations()">
                 ▼ View all donations (सर्व देणगीदार पहा - ${sortedDonations.length})
               </button>
@@ -1321,13 +1327,60 @@ function togglePublicAartis() {
   btn.textContent = isHidden ? '▲ View less (कमी दाखवा)' : '▼ View all 7 days aarti (सर्व ७ दिवसांचे वेळापत्रक पहा)';
 }
 
+function filterPublicDonations(input) {
+  let q = (input.value || '').toLowerCase().trim();
+  let cleanQ = q.replace(/[,₹\s]/g, '');
+  let rows = document.querySelectorAll('#publicDonationRows tr:not(#publicDonationNoMatch)');
+  let toggleWrap = document.getElementById('publicDonationToggleWrap');
+  let btn = document.getElementById('publicDonationToggleBtn');
+  let existingNoMatch = document.getElementById('publicDonationNoMatch');
+
+  if (!q) {
+    // Reset view: hide extra rows if not expanded, show toggle button
+    let isExpanded = btn && btn.textContent.includes('कमी दाखवा');
+    rows.forEach(r => {
+      let isExtra = r.classList.contains('extra-donation-row');
+      r.style.display = (isExtra && !isExpanded) ? 'none' : '';
+    });
+    if (toggleWrap) toggleWrap.style.display = '';
+    if (existingNoMatch) existingNoMatch.remove();
+    return;
+  }
+
+  // Actively searching: hide toggle button and search across ALL rows
+  if (toggleWrap) toggleWrap.style.display = 'none';
+  let matchCount = 0;
+
+  rows.forEach(r => {
+    let text = (r.innerText || '').toLowerCase();
+    let cleanText = text.replace(/[,₹\s]/g, '');
+    let matches = text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+    r.style.display = matches ? '' : 'none';
+    if (matches) matchCount++;
+  });
+
+  if (matchCount === 0) {
+    if (!existingNoMatch) {
+      let tbody = document.getElementById('publicDonationRows');
+      if (tbody) {
+        let tr = document.createElement('tr');
+        tr.id = 'publicDonationNoMatch';
+        tr.innerHTML = `<td colspan="4" class="empty" style="text-align:center; padding:18px; color:#8c7166;">🔍 "${escapeHtml(q)}" साठी कोणतीही देणगी नोंद सापडली नाही</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+  } else if (existingNoMatch) {
+    existingNoMatch.remove();
+  }
+}
+
 function togglePublicDonations() {
   let extraRows = document.querySelectorAll('.extra-donation-row');
   let btn = document.getElementById('publicDonationToggleBtn');
   if (!extraRows.length || !btn) return;
   let isHidden = extraRows[0].style.display === 'none';
   extraRows.forEach(r => r.style.display = isHidden ? '' : 'none');
-  btn.textContent = isHidden ? '▲ Hide extra donations (कम दाखवा)' : `▼ View all donations (सर्व देणगीदार पहा - ${db.donations.length})`;
+  btn.textContent = isHidden ? '▲ Hide extra donations (कमी दाखवा)' : `▼ View all donations (सर्व देणगीदार पहा - ${db.donations.length})`;
 }
 
 function togglePublicExpenses() {
@@ -1336,7 +1389,7 @@ function togglePublicExpenses() {
   if (!extraRows.length || !btn) return;
   let isHidden = extraRows[0].style.display === 'none';
   extraRows.forEach(r => r.style.display = isHidden ? '' : 'none');
-  btn.textContent = isHidden ? '▲ Hide extra expenses (कम दाखवा)' : `▼ View all expenses (सर्व खर्च पहा - ${db.expenses.length})`;
+  btn.textContent = isHidden ? '▲ Hide extra expenses (कमी दाखवा)' : `▼ View all expenses (सर्व खर्च पहा - ${db.expenses.length})`;
 }
 
 /* ── Swipeable Photo Gallery Lightbox ───────────────────────────── */
@@ -1757,7 +1810,7 @@ function donations() {
     </section>
     <div class="card">
       <div class="toolbar">
-        <input class="search" placeholder="Search donor or payment mode…" oninput="filterTable(this,'donationRows')">
+        <input class="search" placeholder="🔍 Search by name, amount e.g. 500, phone, mode…" oninput="filterTable(this,'donationRows')">
         <button class="outline-btn qr-btn-main" onclick="openPaymentQR()">▣ Collect Payment (QR)</button>
         <button class="primary-btn" onclick="openForm('donation')">+ Add Donation</button>
       </div>
@@ -3138,8 +3191,33 @@ function switchMsgDate(d) {
 }
 
 function filterTable(i, target) {
-  let q = i.value.toLowerCase();
-  document.querySelectorAll('#' + target + ' tr').forEach(r => r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none');
+  let q = (i.value || '').toLowerCase().trim();
+  let cleanQ = q.replace(/[,₹\s]/g, '');
+
+  // 1. Filter desktop table rows
+  document.querySelectorAll('#' + target + ' tr').forEach(r => {
+    let text = (r.innerText || '').toLowerCase();
+    let cleanText = text.replace(/[,₹\s]/g, '');
+    let matches = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+    r.style.display = matches ? '' : 'none';
+  });
+
+  // 2. Filter mobile cards if on donations or expenses page
+  if (target === 'donationRows') {
+    document.querySelectorAll('.donation-mobile-list .donation-card').forEach(c => {
+      let text = (c.innerText || '').toLowerCase();
+      let cleanText = text.replace(/[,₹\s]/g, '');
+      let matches = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+      c.style.display = matches ? '' : 'none';
+    });
+  } else if (target === 'expenseRows') {
+    document.querySelectorAll('.expense-mobile-list .expense-card').forEach(c => {
+      let text = (c.innerText || '').toLowerCase();
+      let cleanText = text.replace(/[,₹\s]/g, '');
+      let matches = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+      c.style.display = matches ? '' : 'none';
+    });
+  }
 }
 
 function filterCards(i, target) {
