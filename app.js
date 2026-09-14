@@ -271,7 +271,7 @@ function getDayGroupTitle(dateStr) {
 async function downloadMedia(url, filename) {
   if (!url) return toast('Download failed: No media source found');
   try {
-    toast('📥 डाउनलोड सुरू झाले (Downloading...)');
+    toast('📥 Downloading...');
     let blobUrl = '';
     let isTempBlob = false;
 
@@ -362,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v28';
+const DATA_VERSION = '2026-mandal-prod-v29';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -1203,8 +1203,8 @@ function publicView() {
               <strong>${escapeHtml(item.title)}</strong>
               ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}
               <div class="alankar-card-foot">
-                <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="डाउनलोड करा">
-                  ⬇️ डाउनलोड
+                <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="Download">
+                  ⬇️ Download
                 </button>
               </div>
             </div>
@@ -1228,6 +1228,10 @@ function publicView() {
       `;
     }).join('');
   }
+
+  let galleryHeading = (currentMandal.slug === 'vrindavan' || (currentMandal.name && currentMandal.name.includes('वृंदावन')))
+    ? 'वृंदावन मंडळ Photo Gallery'
+    : `${currentMandal.name} Photo Gallery`;
 
   let donationRows = sortedDonations.map((d, index) => {
     let isExtra = index >= 4;
@@ -1294,7 +1298,7 @@ function publicView() {
       <!-- Section 1: Daily Bappa Alankar & Mukh Darshan Gallery -->
       <div class="card" style="margin-bottom:20px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन, पूजा व व्हिडिओ (${galleryItems.length} मीडिया)</h3>
+          <h3>🌺 ${galleryHeading}</h3>
           <span style="font-size:11px; color:#8b261e; font-weight:600;">👆 फोटो/व्हिडिओवर टॅप करा — स्लाइड करा (Swipe Gallery)</span>
         </div>
         ${galleryHtml}
@@ -1558,8 +1562,8 @@ function _renderGalleryLightbox() {
         <span class="gallery-lb-counter">${_galleryIdx + 1} / ${total}</span>
         <span class="gallery-lb-title">${escapeHtml(item.title)}</span>
         <div style="display:flex; align-items:center; gap:8px;">
-          <button class="gallery-lb-download" onclick="downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="डाउनलोड करा">
-            ⬇️ डाउनलोड
+          <button class="gallery-lb-download" onclick="downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="Download">
+            ⬇️ Download
           </button>
           <button class="gallery-lb-close" onclick="closeGallery()" aria-label="Close">✕</button>
         </div>
