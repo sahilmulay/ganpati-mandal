@@ -248,6 +248,74 @@ function isPdfData(url) {
   return url.startsWith('data:application/pdf') || url.toLowerCase().includes('.pdf');
 }
 
+function isVideoData(url) {
+  if (!url || typeof url !== 'string') return false;
+  let s = url.trim().toLowerCase();
+  return s.startsWith('data:video/') || s.endsWith('.mp4') || s.endsWith('.webm') || s.endsWith('.mov') || s.endsWith('.ogg') || (s.includes('blob:') && s.includes('video'));
+}
+
+function getDayGroupTitle(dateStr) {
+  if (!dateStr) return 'इतर (Other)';
+  let fest = (typeof FESTIVAL_DATES !== 'undefined' ? FESTIVAL_DATES : []).find(f => f.date === dateStr);
+  if (fest) return fest.title;
+  if (typeof dateFullInMarathi === 'function') {
+    let df = dateFullInMarathi(dateStr);
+    if (df) return df;
+  }
+  if (typeof dateLabelInMarathi === 'function') {
+    return dateLabelInMarathi(dateStr);
+  }
+  return dateStr;
+}
+
+async function downloadMedia(url, filename) {
+  if (!url) return toast('Download failed: No media source found');
+  try {
+    toast('📥 डाउनलोड सुरू झाले (Downloading...)');
+    let blobUrl = '';
+    let isTempBlob = false;
+
+    if (url.startsWith('data:')) {
+      let arr = url.split(',');
+      let mimeMatch = arr[0].match(/:(.*?);/);
+      let mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+      let bstr = atob(arr[1]);
+      let n = bstr.length;
+      let u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      let blob = new Blob([u8arr], { type: mime });
+      blobUrl = URL.createObjectURL(blob);
+      isTempBlob = true;
+    } else if (url.startsWith('blob:')) {
+      blobUrl = url;
+    } else {
+      let res = await fetch(url);
+      if (!res.ok) throw new Error('Fetch failed');
+      let blob = await res.blob();
+      blobUrl = URL.createObjectURL(blob);
+      isTempBlob = true;
+    }
+
+    let a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename || ('bappa_darshan_' + Date.now() + (isVideoData(url) ? '.mp4' : '.jpg'));
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      a.remove();
+      if (isTempBlob) URL.revokeObjectURL(blobUrl);
+    }, 1500);
+  } catch (err) {
+    console.warn('Download error, fallback to new tab:', err);
+    let win = window.open(url, '_blank');
+    if (!win) {
+      location.href = url;
+    }
+  }
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve) => {
     let reader = new FileReader();
@@ -294,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v27';
+const DATA_VERSION = '2026-mandal-prod-v28';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -524,7 +592,8 @@ function fromCloud(type, row) {
     } else {
       parsedTitle = rawNote; // fallback: use note as title if no separator
     }
-    return { ...row, image: img, image_url: img, title: parsedTitle, note: parsedNote };
+    let mediaType = row.type || (isVideoData(img) ? 'video' : 'photo');
+    return { ...row, image: img, image_url: img, title: parsedTitle, note: parsedNote, type: mediaType };
   }
   return row;
 }
@@ -573,6 +642,7 @@ function toCloud(type, row) {
     // id MUST be preserved — alankar uses explicit string IDs, not auto-gen UUIDs
     copy.id = row.id;
     copy.image = img;
+    copy.type = row.type || (isVideoData(img) ? 'video' : 'photo');
     delete copy.image_url;
     delete copy.title; // no 'title' column in alankar table
   }
@@ -1084,22 +1154,80 @@ function publicView() {
   let contactsList = db.contacts && db.contacts.length ? db.contacts : [];
 
 
-  // ── Swipeable Gallery ────────────────────────────────────────────
-  let galleryImages = alankars.filter(a => hasValidImage(a.image));
-  let galleryHtml = galleryImages.length ? galleryImages.map((item, idx) => `
-    <div class="alankar-card" onclick="openGallery(${idx})">
-      <div class="alankar-img-wrap">
-        <img src="${item.image}" alt="${escapeHtml(item.title)}" loading="lazy">
-        <span class="alankar-date-tag">📅 ${dateLabelInMarathi(item.date)}</span>
-        <span class="gallery-counter-badge">${idx + 1}/${galleryImages.length}</span>
-      </div>
-      <div class="alankar-info">
-        <strong>${escapeHtml(item.title)}</strong>
-        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}
-      </div>
-    </div>
-  `).join('') : '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो अपलोड केलेले नाहीत.</div>';
+  // ── Day-wise Media Gallery (Photos & Videos) ─────────────────────
+  let galleryItems = alankars.filter(a => hasValidImage(a.image));
+  let galleryHtml = '';
 
+  if (!galleryItems.length) {
+    galleryHtml = '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो किंवा व्हिडिओ अपलोड केलेले नाहीत.</div>';
+  } else {
+    // Group by date (newest day first)
+    let dayMap = new Map();
+    galleryItems.forEach(item => {
+      let d = item.date || 'अन्य';
+      if (!dayMap.has(d)) dayMap.set(d, []);
+      dayMap.get(d).push(item);
+    });
+
+    galleryHtml = Array.from(dayMap.entries()).map(([dateKey, items]) => {
+      let photoCount = items.filter(x => !(x.type === 'video' || isVideoData(x.image))).length;
+      let videoCount = items.filter(x => x.type === 'video' || isVideoData(x.image)).length;
+      let countBadge = [];
+      if (photoCount > 0) countBadge.push(`${photoCount} फोटो`);
+      if (videoCount > 0) countBadge.push(`${videoCount} व्हिडिओ`);
+      let countText = countBadge.join(', ') || `${items.length} मीडिया`;
+
+      let cardsHtml = items.map(item => {
+        let globalIdx = galleryItems.indexOf(item);
+        let isVid = item.type === 'video' || isVideoData(item.image);
+        let ext = isVid ? 'mp4' : 'jpg';
+        let safeTitle = (item.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
+        let filename = `bappa_${safeTitle}_${item.date || today}.${ext}`;
+
+        return `
+          <div class="alankar-card" onclick="openGallery(${globalIdx})">
+            <div class="alankar-img-wrap">
+              ${isVid ? `
+                <video src="${escapeHtml(item.image)}#t=0.5" preload="metadata" muted playsinline></video>
+                <div class="alankar-video-tag">🎥 व्हिडिओ</div>
+                <div class="alankar-play-overlay">
+                  <div class="alankar-play-btn">▶</div>
+                </div>
+              ` : `
+                <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy">
+              `}
+              <span class="alankar-date-tag">📅 ${dateLabelInMarathi(item.date)}</span>
+              <span class="gallery-counter-badge">${globalIdx + 1}/${galleryItems.length}</span>
+            </div>
+            <div class="alankar-info">
+              <strong>${escapeHtml(item.title)}</strong>
+              ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}
+              <div class="alankar-card-foot">
+                <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="डाउनलोड करा">
+                  ⬇️ डाउनलोड
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="alankar-day-group">
+          <div class="alankar-day-header">
+            <div class="alankar-day-title">
+              <span>📅</span>
+              <span>${escapeHtml(getDayGroupTitle(dateKey))}</span>
+            </div>
+            <span class="alankar-day-count">${countText}</span>
+          </div>
+          <div class="alankar-grid">
+            ${cardsHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
 
   let donationRows = sortedDonations.map((d, index) => {
     let isExtra = index >= 4;
@@ -1166,12 +1294,10 @@ function publicView() {
       <!-- Section 1: Daily Bappa Alankar & Mukh Darshan Gallery -->
       <div class="card" style="margin-bottom:20px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन व पूजा अलंकार (${galleryImages.length} फोटो)</h3>
-          <span style="font-size:11px; color:#8b261e; font-weight:600;">👆 फोटोवर टॅप करा — स्लाइड करा (Swipe Gallery)</span>
+          <h3>🌺 श्री बाप्पा दैनंदिन मुखदर्शन, पूजा व व्हिडिओ (${galleryItems.length} मीडिया)</h3>
+          <span style="font-size:11px; color:#8b261e; font-weight:600;">👆 फोटो/व्हिडिओवर टॅप करा — स्लाइड करा (Swipe Gallery)</span>
         </div>
-        <div class="alankar-grid">
-          ${galleryHtml}
-        </div>
+        ${galleryHtml}
       </div>
 
 
@@ -1392,14 +1518,14 @@ function togglePublicExpenses() {
   btn.textContent = isHidden ? '▲ Hide extra expenses (कमी दाखवा)' : `▼ View all expenses (सर्व खर्च पहा - ${db.expenses.length})`;
 }
 
-/* ── Swipeable Photo Gallery Lightbox ───────────────────────────── */
+/* ── Swipeable Photo & Video Gallery Lightbox ────────────────────── */
 let _galleryItems = [];
 let _galleryIdx   = 0;
 
 function openGallery(idx) {
-  _galleryItems = (db.alankar || []).filter(a => hasValidImage(a.image));
+  _galleryItems = sortByNewest((db.alankar || []).filter(a => hasValidImage(a.image)));
   if (!_galleryItems.length) return;
-  _galleryIdx = Math.min(idx, _galleryItems.length - 1);
+  _galleryIdx = Math.max(0, Math.min(idx, _galleryItems.length - 1));
   _renderGalleryLightbox();
 }
 
@@ -1408,7 +1534,17 @@ function _renderGalleryLightbox() {
   let total = _galleryItems.length;
   let hasPrev = _galleryIdx > 0;
   let hasNext = _galleryIdx < total - 1;
+  let isVid   = item.type === 'video' || isVideoData(item.image);
   let isPdf   = isPdfData(item.image);
+  let ext     = isVid ? 'mp4' : 'jpg';
+  let safeTitle = (item.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
+  let filename = `bappa_${safeTitle}_${item.date || today}.${ext}`;
+
+  // Pause any currently playing video before re-rendering
+  let prevVideo = document.querySelector('.gallery-lb-video');
+  if (prevVideo) {
+    try { prevVideo.pause(); prevVideo.src = ''; } catch(e) {}
+  }
 
   let existing = document.getElementById('galleryLightbox');
   if (existing) existing.remove();
@@ -1421,16 +1557,25 @@ function _renderGalleryLightbox() {
       <div class="gallery-lb-topbar">
         <span class="gallery-lb-counter">${_galleryIdx + 1} / ${total}</span>
         <span class="gallery-lb-title">${escapeHtml(item.title)}</span>
-        <button class="gallery-lb-close" onclick="closeGallery()" aria-label="Close">✕</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="gallery-lb-download" onclick="downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="डाउनलोड करा">
+            ⬇️ डाउनलोड
+          </button>
+          <button class="gallery-lb-close" onclick="closeGallery()" aria-label="Close">✕</button>
+        </div>
       </div>
       <div class="gallery-lb-stage" id="galleryStage">
         ${isPdf
           ? `<div style="text-align:center;padding:40px 20px;color:#fff;"><div style="font-size:64px;">📄</div><p style="margin:12px 0 20px;">${escapeHtml(item.title)}</p><a href="${escapeHtml(item.image)}" target="_blank" class="primary-btn">Open PDF</a></div>`
-          : `<img class="gallery-lb-img" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" draggable="false">`}
+          : (isVid
+            ? `<video class="gallery-lb-video" controls autoplay playsinline src="${escapeHtml(item.image)}"></video>`
+            : `<img class="gallery-lb-img" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" draggable="false">`
+          )}
       </div>
       <div class="gallery-lb-info">
         <span>📅 ${dateLabelInMarathi(item.date)}</span>
-        ${item.note ? `<span style="margin-left:10px;opacity:0.8;">${escapeHtml(item.note)}</span>` : ''}
+        ${isVid ? '<span style="background:rgba(159,46,32,0.85);color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">🎥 व्हिडिओ</span>' : ''}
+        ${item.note ? `<span style="margin-left:10px;opacity:0.85;">${escapeHtml(item.note)}</span>` : ''}
       </div>
       <div class="gallery-lb-nav">
         <button class="gallery-nav-btn" onclick="galleryPrev()" ${hasPrev ? '' : 'disabled'} aria-label="Previous">‹</button>
@@ -1471,12 +1616,22 @@ function galleryNext() {
   if (_galleryIdx < _galleryItems.length - 1) { _galleryIdx++; _renderGalleryLightbox(); }
 }
 function closeGallery() {
+  let prevVideo = document.querySelector('.gallery-lb-video');
+  if (prevVideo) {
+    try { prevVideo.pause(); prevVideo.src = ''; } catch(e) {}
+  }
   let lb = document.getElementById('galleryLightbox');
   if (lb) {
     if (lb._keyHandler) document.removeEventListener('keydown', lb._keyHandler);
     lb.remove();
   }
 }
+
+window.openGallery = openGallery;
+window.closeGallery = closeGallery;
+window.galleryPrev = galleryPrev;
+window.galleryNext = galleryNext;
+window.downloadMedia = downloadMedia;
 
 /* Dashboard Page */
 function dashboard() {
@@ -1522,7 +1677,7 @@ function dashboard() {
           <button class="quick-btn" onclick="openForm('expense')"><span>💸</span>Add Expense</button>
           <button class="quick-btn" onclick="openForm('aarti')"><span>🪔</span>Add Aarti</button>
           <button class="quick-btn highlight-quick" onclick="openPaymentQR()"><span>▣</span>Collect QR</button>
-          <button class="quick-btn" onclick="openAlankarForm()"><span>🌺</span>Add Darshan Photo</button>
+          <button class="quick-btn" onclick="openAlankarForm()"><span>🌺</span>Add Darshan Media</button>
           <button class="quick-btn" onclick="go('documents.html')"><span>📁</span>Official Docs</button>
         </div>
       </div>
@@ -2011,24 +2166,93 @@ function reports() {
   );
 }
 
-/* Form Uploader supporting Single or Multiple Bappa Alankar Photos */
+/* Form Uploader supporting Single/Multiple Photos and Direct Video Uploads */
 function openAlankarForm() {
   modal(
-    'Upload Daily Bappa Mukh Darshan Photo',
+    'Upload Daily Bappa Mukh Darshan (Photo / Video)',
     `<form onsubmit="submitAlankarForm(event)">
       <div class="form-grid">
-        <div class="field full"><label>Title / Decoration details</label><input name="title" required placeholder="e.g. प्रथम दिन - पुष्प शृंगार पूजा"></div>
-        <div class="field"><label>Date</label><input name="date" type="date" value="${today}"></div>
-        <div class="field full"><label>Select Bappa Photo(s) (Multiple allowed)</label><input name="image" type="file" accept="image/*" multiple required onchange="previewMultiInput(this)"></div>
-        <div class="field full" id="multiPhotoPreview" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;"></div>
-        <div class="field full"><label>Optional note</label><textarea name="note" placeholder="e.g. आजची विशेष महाआरती व पुष्प सजावट"></textarea></div>
+        <div class="field full">
+          <label>Media Type (माध्यम प्रकार)</label>
+          <div style="display:flex; gap:16px; margin-top:4px;">
+            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; font-size:13px; color:#2c1b18;">
+              <input type="radio" name="media_type" value="photo" checked onchange="toggleAlankarMediaType('photo')">
+              📷 फोटो (Photos)
+            </label>
+            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; font-size:13px; color:#2c1b18;">
+              <input type="radio" name="media_type" value="video" onchange="toggleAlankarMediaType('video')">
+              🎥 व्हिडिओ (Video)
+            </label>
+          </div>
+        </div>
+
+        <div class="field full"><label>Title / Decoration details (शीर्षक / पूजा शृंगार)</label><input name="title" required placeholder="e.g. प्रथम दिन - पुष्प शृंगार व महाआरती"></div>
+        <div class="field"><label>Date (तारीख)</label><input name="date" type="date" value="${today}"></div>
+
+        <!-- Photo Selection -->
+        <div class="field full" id="alankarPhotoField">
+          <label>Select Bappa Photo(s) (एकापेक्षा जास्त फोटो निवडू शकता)</label>
+          <input name="image" type="file" accept="image/*" multiple required onchange="previewMultiInput(this)">
+          <div id="multiPhotoPreview" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;"></div>
+        </div>
+
+        <!-- Video Selection (Direct device file only, strictly no external links) -->
+        <div class="field full" id="alankarVideoField" style="display:none;">
+          <label>Select Bappa Video (थेट व्हिडिओ निवडा - कमाल १५ MB)</label>
+          <input name="video_file" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*" onchange="previewVideoInput(this)">
+          <small style="display:block; margin-top:4px; color:#7f1d1d; font-size:11px;">
+            ℹ️ डिव्हाइसमधील MP4 / WebM व्हिडिओ निवडा (कमाल आकार: १५ MB).
+          </small>
+          <div id="videoFilePreview" style="margin-top:6px; font-weight:600; font-size:12px; color:#9f2e20;"></div>
+        </div>
+
+        <div class="field full"><label>Optional note (विशेष माहिती / टीप)</label><textarea name="note" placeholder="e.g. आजची विशेष महाआरती व फुलांची आरास"></textarea></div>
       </div>
       <div class="modal-actions">
         <button type="button" class="outline-btn" onclick="closeModal()">Cancel</button>
-        <button class="primary-btn">Upload Photos</button>
+        <button class="primary-btn" id="alankarSubmitBtn">Upload Photos</button>
       </div>
     </form>`
   );
+}
+
+function toggleAlankarMediaType(type) {
+  let photoField = document.getElementById('alankarPhotoField');
+  let videoField = document.getElementById('alankarVideoField');
+  let submitBtn = document.getElementById('alankarSubmitBtn');
+  let photoInput = document.querySelector('input[name="image"]');
+  let videoInput = document.querySelector('input[name="video_file"]');
+
+  if (type === 'video') {
+    if (photoField) photoField.style.display = 'none';
+    if (videoField) videoField.style.display = 'block';
+    if (submitBtn) submitBtn.textContent = 'Upload Video';
+    if (photoInput) photoInput.removeAttribute('required');
+    if (videoInput) videoInput.setAttribute('required', 'required');
+  } else {
+    if (photoField) photoField.style.display = 'block';
+    if (videoField) videoField.style.display = 'none';
+    if (submitBtn) submitBtn.textContent = 'Upload Photos';
+    if (photoInput) photoInput.setAttribute('required', 'required');
+    if (videoInput) videoInput.removeAttribute('required');
+  }
+}
+
+function previewVideoInput(input) {
+  let preview = document.getElementById('videoFilePreview');
+  if (!preview) return;
+  let file = input.files && input.files[0];
+  if (!file) {
+    preview.innerHTML = '';
+    return;
+  }
+  let sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+  if (file.size > 15 * 1024 * 1024) {
+    preview.innerHTML = `<span style="color:#dc2626;">⚠️ फाईल आकार: ${sizeMb} MB. हा व्हिडिओ १५ MB पेक्षा मोठा आहे. कृपया १५ MB पेक्षा लहान व्हिडिओ निवडा.</span>`;
+    input.value = '';
+  } else {
+    preview.innerHTML = `<span style="color:#15803d;">🎥 निवडलेला व्हिडिओ: ${escapeHtml(file.name)} (${sizeMb} MB)</span>`;
+  }
 }
 
 function previewMultiInput(input) {
@@ -2041,16 +2265,82 @@ function previewMultiInput(input) {
 async function submitAlankarForm(ev) {
   ev.preventDefault();
   let f = new FormData(ev.target);
+  let mediaType = f.get('media_type') || 'photo';
   let title = f.get('title') || '';
   let date = f.get('date') || today;
   let note = f.get('note') || '';
-  let input = ev.target.querySelector('input[type="file"]');
+  let combinedNote = title ? (note ? `${title} — ${note}` : title) : note;
+
+  // ── Handle Video Upload ──────────────────────────────────────────
+  if (mediaType === 'video') {
+    let videoInput = ev.target.querySelector('input[name="video_file"]');
+    let videoFile = videoInput && videoInput.files ? videoInput.files[0] : null;
+    if (!videoFile) return toast('कृपया व्हिडिओ निवडा (Please select a video file)');
+
+    let maxBytes = 15 * 1024 * 1024;
+    if (videoFile.size > maxBytes) {
+      return toast('⚠️ व्हिडिओ १५ MB पेक्षा मोठा आहे. कृपया १५ MB पेक्षा लहान व्हिडिओ निवडा.');
+    }
+
+    showLoader('Uploading video… please wait');
+    let videoDataUrl = await readFileAsDataUrl(videoFile);
+    if (!videoDataUrl) {
+      hideLoader();
+      return toast('⚠️ व्हिडिओ फाईल वाचता आली नाही.');
+    }
+
+    let itemId = 'k' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100);
+    let item = {
+      id: itemId,
+      title: title,
+      date: date,
+      note: combinedNote,
+      image: videoDataUrl,
+      type: 'video'
+    };
+    db.alankar.unshift(item);
+    save();
+
+    let cloudOk = true;
+    if (cloud) {
+      try {
+        let payload = toCloud('alankar', item);
+        let { data, error } = await cloud.from('alankar').upsert(payload, { onConflict: 'id' }).select().single();
+        if (error) {
+          console.warn('Alankar video cloud sync error:', error);
+          cloudOk = false;
+        } else if (data) {
+          let idx = db.alankar.findIndex(x => x.id === itemId);
+          if (idx >= 0) {
+            db.alankar[idx] = fromCloud('alankar', data);
+            db.alankar[idx].title = title;
+            db.alankar[idx].type = 'video';
+          }
+        }
+      } catch (err) {
+        console.warn('Alankar upload error:', err);
+        cloudOk = false;
+      }
+    }
+
+    save();
+    render();
+    hideLoader();
+    closeModal();
+
+    if (cloudOk) {
+      toast('✅ मुखदर्शन व्हिडिओ यशस्वीरीत्या जतन झाला! (Video saved successfully)');
+    } else {
+      toast('⚠️ व्हिडिओ स्थानिक सेव्ह झाला, पण क्लाउड सिंक होऊ शकला नाही. (Cloud sync error)');
+    }
+    return;
+  }
+
+  // ── Handle Photos Upload ─────────────────────────────────────────
+  let input = ev.target.querySelector('input[name="image"]');
   let files = input && input.files ? Array.from(input.files).filter(file => file && file.size && file.type.startsWith('image/')) : [];
 
   if (!files.length) return toast('Please select at least one photo');
-
-  // Combine title + note for the note field (since alankar table has no title column)
-  let combinedNote = title ? (note ? `${title} — ${note}` : title) : note;
 
   showLoader(`Uploading ${files.length} photo(s)… please wait`);
   let successCount = 0, failCount = 0;
@@ -2063,7 +2353,8 @@ async function submitAlankarForm(ev) {
       title: title,       // kept locally for display in gallery
       date: date,
       note: combinedNote, // stored in DB note column (includes title)
-      image: compressedUrl
+      image: compressedUrl,
+      type: 'photo'
     };
     db.alankar.unshift(item);
     save();
@@ -2083,6 +2374,7 @@ async function submitAlankarForm(ev) {
               db.alankar[idx] = fromCloud('alankar', data);
               // Restore title locally (not in DB) for display purposes
               db.alankar[idx].title = title;
+              db.alankar[idx].type = 'photo';
             }
           }
           successCount++;
@@ -2110,6 +2402,11 @@ async function submitAlankarForm(ev) {
   }
 }
 
+window.openAlankarForm = openAlankarForm;
+window.submitAlankarForm = submitAlankarForm;
+window.toggleAlankarMediaType = toggleAlankarMediaType;
+window.previewVideoInput = previewVideoInput;
+window.previewMultiInput = previewMultiInput;
 
 /* One-Click Executive Audit Report Bundle Generator */
 function openAuditReportBundle() {

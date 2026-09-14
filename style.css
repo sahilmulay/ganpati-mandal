@@ -610,12 +610,48 @@ body {
   margin-top: 8px;
 }
 
-/* Alankar Mukh Darshan Photo Gallery */
+/* Alankar Mukh Darshan Photo & Video Gallery */
+.alankar-day-group {
+  margin-bottom: 24px;
+}
+
+.alankar-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #fff8f3;
+  border: 1px solid #f2dfd3;
+  border-left: 4px solid #9f2e20;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.alankar-day-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #7f1d1d;
+}
+
+.alankar-day-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9f2e20;
+  background: #fde8e3;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid #f9cac2;
+}
+
 .alankar-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px;
-  margin-top: 12px;
 }
 
 .alankar-card {
@@ -626,6 +662,8 @@ body {
   box-shadow: 0 4px 14px rgba(107, 57, 23, 0.06);
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .alankar-card:hover {
@@ -637,7 +675,7 @@ body {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
-  background: #f7eee4;
+  background: #1a1008;
   overflow: hidden;
 }
 
@@ -646,6 +684,66 @@ body {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.alankar-img-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.alankar-video-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(159, 46, 32, 0.9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.alankar-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  transition: background 0.2s;
+  z-index: 1;
+}
+
+.alankar-card:hover .alankar-play-overlay {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.alankar-play-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(159, 46, 32, 0.92);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  border: 2px solid #fff;
+  padding-left: 3px;
+  transition: transform 0.2s;
+}
+
+.alankar-card:hover .alankar-play-btn {
+  transform: scale(1.12);
 }
 
 .alankar-date-tag {
@@ -659,10 +757,14 @@ body {
   padding: 3px 8px;
   border-radius: 6px;
   backdrop-filter: blur(4px);
+  z-index: 2;
 }
 
 .alankar-info {
   padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .alankar-info strong {
@@ -673,9 +775,41 @@ body {
 }
 
 .alankar-info p {
-  margin: 4px 0 0 0;
+  margin: 4px 0 8px 0;
   font-size: 11px;
   color: #6e584f;
+  flex: 1;
+}
+
+.alankar-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px dashed #f2e2d6;
+}
+
+.card-download-btn {
+  background: #fff5ee;
+  border: 1px solid #f0d5c4;
+  color: #8b261e;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.card-download-btn:hover {
+  background: #8b261e;
+  color: #fff;
+  border-color: #8b261e;
 }
 
 /* Public Mobile Responsive Adjustments */
@@ -1080,6 +1214,27 @@ body {
   line-height: 1;
 }
 
+.gallery-lb-download {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.gallery-lb-download:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
 .gallery-lb-stage {
   flex: 1;
   display: flex;
@@ -1101,6 +1256,16 @@ body {
   margin: auto;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+.gallery-lb-video {
+  max-width: 100%;
+  max-height: 68dvh;
+  object-fit: contain;
+  display: block;
+  margin: auto;
+  outline: none;
+  background: #000;
 }
 
 .gallery-lb-info {
@@ -1170,5 +1335,5 @@ body {
 @media (max-width: 420px) {
   #galleryLightbox { padding: 8px; }
   .gallery-lb-shell { max-height: 96dvh; border-radius: 14px; }
-  .gallery-lb-img   { max-height: 64dvh; }
+  .gallery-lb-img, .gallery-lb-video { max-height: 64dvh; }
 }
