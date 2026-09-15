@@ -1443,6 +1443,83 @@ body {
   gap: 6px;
 }
 
+/* ── Public Portal Modern Developer Footer ─────────────────────── */
+.public-footer {
+  margin-top: 24px;
+  padding: 22px 16px 26px;
+  border-top: 1px solid #e8d7ca;
+  text-align: center;
+  background: #fdf6f0;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(107, 57, 23, 0.04);
+}
+
+.public-footer-top {
+  font-size: 12px;
+  color: #7a5c4d;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.public-footer-dev {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2cfc2;
+}
+
+.public-footer-dev-label {
+  font-size: 11px;
+  color: #8c7166;
+  font-weight: 500;
+}
+
+.public-footer-dev-name {
+  font-size: 14.5px;
+  color: #8b261e;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.public-footer-contacts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.public-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #3b251a;
+  text-decoration: none;
+  background: #ffffff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid #ebd8cb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+}
+
+.public-footer-link:hover {
+  background: #8b261e;
+  color: #ffffff;
+  border-color: #8b261e;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(139, 38, 30, 0.2);
+}
+
+.public-footer-divider {
+  color: #c4aca0;
+  font-size: 10px;
+}
 
 /* ── Gallery Counter Badge on Alankar Cards ─────────────────────── */
 .gallery-counter-badge {

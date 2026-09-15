@@ -362,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v31';
+const DATA_VERSION = '2026-mandal-prod-v32';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -1451,9 +1451,29 @@ function publicView() {
         </div>
       </div>
 
-      <div style="text-align:center; padding:16px; color:#6b7280; font-size:11px; border-top:1px solid #e5e7eb;">
-        🙏 <b>${currentMandal.name}</b> परिवार | सर्व हक्क सुरक्षित 🙏
-      </div>
+      <!-- Public Footer -->
+      <footer class="public-footer">
+        <div class="public-footer-top">
+          🙏 <b>${currentMandal.name}</b> परिवार | सर्व हक्क सुरक्षित 🙏
+        </div>
+        <div class="public-footer-dev">
+          <span class="public-footer-dev-label">Designed & Developed by</span>
+          <b class="public-footer-dev-name">Sahil Mulay</b>
+          <div class="public-footer-contacts">
+            <a href="tel:7517496844" class="public-footer-link" title="Call Sahil Mulay">
+              <span>📞</span> 7517496844
+            </a>
+            <span class="public-footer-divider">•</span>
+            <a href="https://api.whatsapp.com/send?phone=917517496844&text=${encodeURIComponent('॥ श्री गणेशाय नमः ॥ नमस्कार साहिल, मी ' + currentMandal.name + ' पोर्टलवरून संपर्क करत आहे.')}" target="_blank" class="public-footer-link" title="WhatsApp Sahil Mulay">
+              <span>💬</span> WhatsApp
+            </a>
+            <span class="public-footer-divider">•</span>
+            <a href="mailto:sahilamulay@gmail.com" class="public-footer-link" title="Email Sahil Mulay">
+              <span>✉️</span> sahilamulay@gmail.com
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   `;
 }
