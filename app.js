@@ -362,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v29';
+const DATA_VERSION = '2026-mandal-prod-v30';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -1177,40 +1177,36 @@ function publicView() {
       if (videoCount > 0) countBadge.push(`${videoCount} व्हिडिओ`);
       let countText = countBadge.join(', ') || `${items.length} मीडिया`;
 
-      let cardsHtml = items.map(item => {
+      let count = Math.min(items.length, 4);
+      let visibleItems = items.slice(0, 4);
+      let remainingCount = items.length - 4;
+
+      let tilesHtml = visibleItems.map((item, i) => {
         let globalIdx = galleryItems.indexOf(item);
         let isVid = item.type === 'video' || isVideoData(item.image);
-        let ext = isVid ? 'mp4' : 'jpg';
-        let safeTitle = (item.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
-        let filename = `bappa_${safeTitle}_${item.date || today}.${ext}`;
+        let isLastBlock = (i === 3 && remainingCount > 0);
 
         return `
-          <div class="alankar-card" onclick="openGallery(${globalIdx})">
-            <div class="alankar-img-wrap">
-              ${isVid ? `
-                <video src="${escapeHtml(item.image)}#t=0.5" preload="metadata" muted playsinline></video>
-                <div class="alankar-video-tag">🎥 व्हिडिओ</div>
-                <div class="alankar-play-overlay">
-                  <div class="alankar-play-btn">▶</div>
-                </div>
-              ` : `
-                <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy">
-              `}
-              <span class="alankar-date-tag">📅 ${dateLabelInMarathi(item.date)}</span>
-              <span class="gallery-counter-badge">${globalIdx + 1}/${galleryItems.length}</span>
-            </div>
-            <div class="alankar-info">
-              <strong>${escapeHtml(item.title)}</strong>
-              ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}
-              <div class="alankar-card-foot">
-                <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="Download">
-                  ⬇️ Download
-                </button>
-              </div>
-            </div>
+          <div class="wa-collage-item" onclick="openGallery(${globalIdx})">
+            ${isVid ? `
+              <video src="${escapeHtml(item.image)}#t=0.5" preload="metadata" muted playsinline></video>
+              <div class="wa-play-btn"><div class="wa-play-icon">▶</div></div>
+              <span class="wa-badge-hd">HD</span>
+            ` : `
+              <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy">
+            `}
+            ${isLastBlock ? `<div class="wa-collage-overlay">+${remainingCount}</div>` : ''}
           </div>
         `;
       }).join('');
+
+      let firstItem = items[0];
+      let caption = firstItem.title || dateLabelInMarathi(dateKey);
+      let firstGlobalIdx = galleryItems.indexOf(firstItem);
+      let isVidFirst = firstItem.type === 'video' || isVideoData(firstItem.image);
+      let ext = isVidFirst ? 'mp4' : 'jpg';
+      let safeTitle = (firstItem.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
+      let filename = `bappa_${safeTitle}_${dateKey || today}.${ext}`;
 
       return `
         <div class="alankar-day-group">
@@ -1221,8 +1217,23 @@ function publicView() {
             </div>
             <span class="alankar-day-count">${countText}</span>
           </div>
-          <div class="alankar-grid">
-            ${cardsHtml}
+          <div class="wa-collage-card">
+            <div class="wa-collage-grid count-${count}">
+              ${tilesHtml}
+            </div>
+            <div class="wa-collage-footer">
+              <div class="wa-collage-caption" title="${escapeHtml(caption)}">
+                ${escapeHtml(caption)}
+              </div>
+              <div class="wa-collage-actions">
+                <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(firstItem.image)}', '${escapeHtml(filename)}')" title="Download">
+                  ⬇️ Download
+                </button>
+                <button class="wa-view-all-btn" onclick="openGallery(${firstGlobalIdx})" title="View all photos">
+                  👁️ View all (${items.length})
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -2170,8 +2181,81 @@ function reports() {
   );
 }
 
+let alankarSelectedPhotos = [];
+let selectedAlankarVideoFile = null;
+
+function triggerAlankarPhotoCamera() {
+  let inp = document.getElementById('alankarPhotoCameraInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function triggerAlankarPhotoGallery() {
+  let inp = document.getElementById('alankarPhotoGalleryInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function onAlankarPhotoSelected(input) {
+  if (!input.files || !input.files.length) return;
+  for (let f of Array.from(input.files)) {
+    if (f.type && f.type.startsWith('image/')) {
+      alankarSelectedPhotos.push(f);
+    }
+  }
+  renderAlankarPhotoPreviews();
+}
+
+function removeAlankarPhoto(idx) {
+  alankarSelectedPhotos.splice(idx, 1);
+  renderAlankarPhotoPreviews();
+}
+
+function renderAlankarPhotoPreviews() {
+  let container = document.getElementById('multiPhotoPreview');
+  if (!container) return;
+  if (!alankarSelectedPhotos.length) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = `
+    <div style="width:100%; font-weight:700; color:#8b261e; font-size:12px; margin-bottom:4px;">
+      ✅ ${alankarSelectedPhotos.length} फोटो निवडले आहेत:
+    </div>
+    ${alankarSelectedPhotos.map((f, i) => {
+      let url = URL.createObjectURL(f);
+      return `
+        <div class="media-preview-item">
+          <img src="${url}" alt="Preview">
+          <button type="button" class="media-preview-remove" onclick="removeAlankarPhoto(${i})" title="Remove">✕</button>
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+function triggerAlankarVideoCamera() {
+  let inp = document.getElementById('alankarVideoCameraInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function triggerAlankarVideoGallery() {
+  let inp = document.getElementById('alankarVideoGalleryInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function removeAlankarVideo() {
+  selectedAlankarVideoFile = null;
+  let cam = document.getElementById('alankarVideoCameraInput');
+  let gal = document.getElementById('alankarVideoGalleryInput');
+  if (cam) cam.value = '';
+  if (gal) gal.value = '';
+  let preview = document.getElementById('videoFilePreview');
+  if (preview) preview.innerHTML = '';
+}
+
 /* Form Uploader supporting Single/Multiple Photos and Direct Video Uploads */
 function openAlankarForm() {
+  alankarSelectedPhotos = [];
+  selectedAlankarVideoFile = null;
   modal(
     'Upload Daily Bappa Mukh Darshan (Photo / Video)',
     `<form onsubmit="submitAlankarForm(event)">
@@ -2193,19 +2277,41 @@ function openAlankarForm() {
         <div class="field full"><label>Title / Decoration details (शीर्षक / पूजा शृंगार)</label><input name="title" required placeholder="e.g. प्रथम दिन - पुष्प शृंगार व महाआरती"></div>
         <div class="field"><label>Date (तारीख)</label><input name="date" type="date" value="${today}"></div>
 
-        <!-- Photo Selection -->
+        <!-- Photo Selection with Camera & Gallery Buttons -->
         <div class="field full" id="alankarPhotoField">
-          <label>Select Bappa Photo(s) (एकापेक्षा जास्त फोटो निवडू शकता)</label>
-          <input name="image" type="file" accept="image/*" multiple required onchange="previewMultiInput(this)">
-          <div id="multiPhotoPreview" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;"></div>
+          <label>Select Bappa Photo(s) (कॅमेऱ्याने फोटो काढा किंवा गॅलरीमधून निवडा)</label>
+          <div class="media-source-picker">
+            <div class="media-source-buttons">
+              <button type="button" class="media-source-btn camera" onclick="triggerAlankarPhotoCamera()">
+                📷 कॅमेऱ्याने फोटो काढा (Camera)
+              </button>
+              <button type="button" class="media-source-btn gallery" onclick="triggerAlankarPhotoGallery()">
+                🖼️ गॅलरीमधून निवडा (Gallery)
+              </button>
+            </div>
+            <input id="alankarPhotoCameraInput" type="file" accept="image/*" capture="environment" style="display:none;" onchange="onAlankarPhotoSelected(this)">
+            <input id="alankarPhotoGalleryInput" type="file" accept="image/*" multiple style="display:none;" onchange="onAlankarPhotoSelected(this)">
+          </div>
+          <div id="multiPhotoPreview" class="media-preview-container"></div>
         </div>
 
-        <!-- Video Selection (Direct device file only, strictly no external links) -->
+        <!-- Video Selection with Camera & File Options -->
         <div class="field full" id="alankarVideoField" style="display:none;">
-          <label>Select Bappa Video (थेट व्हिडिओ निवडा - कमाल १५ MB)</label>
-          <input name="video_file" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*" onchange="previewVideoInput(this)">
-          <small style="display:block; margin-top:4px; color:#7f1d1d; font-size:11px;">
-            ℹ️ डिव्हाइसमधील MP4 / WebM व्हिडिओ निवडा (कमाल आकार: १५ MB).
+          <label>Select Bappa Video (व्हिडिओ रेकॉर्ड करा किंवा फाईल निवडा - कमाल १५ MB)</label>
+          <div class="media-source-picker">
+            <div class="media-source-buttons">
+              <button type="button" class="media-source-btn camera" onclick="triggerAlankarVideoCamera()">
+                📹 व्हिडिओ रेकॉर्ड करा (Camera)
+              </button>
+              <button type="button" class="media-source-btn gallery" onclick="triggerAlankarVideoGallery()">
+                📁 फाईलमधून व्हिडिओ निवडा (Files)
+              </button>
+            </div>
+            <input id="alankarVideoCameraInput" type="file" accept="video/*" capture="environment" style="display:none;" onchange="previewVideoInput(this)">
+            <input id="alankarVideoGalleryInput" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*" style="display:none;" onchange="previewVideoInput(this)">
+          </div>
+          <small style="display:block; margin-top:6px; color:#7f1d1d; font-size:11px;">
+            ℹ️ डिव्हाइसमधील MP4 / WebM व्हिडिओ निवडा किंवा कॅमेऱ्याने रेकॉर्ड करा (कमाल आकार: १५ MB).
           </small>
           <div id="videoFilePreview" style="margin-top:6px; font-weight:600; font-size:12px; color:#9f2e20;"></div>
         </div>
@@ -2224,21 +2330,15 @@ function toggleAlankarMediaType(type) {
   let photoField = document.getElementById('alankarPhotoField');
   let videoField = document.getElementById('alankarVideoField');
   let submitBtn = document.getElementById('alankarSubmitBtn');
-  let photoInput = document.querySelector('input[name="image"]');
-  let videoInput = document.querySelector('input[name="video_file"]');
 
   if (type === 'video') {
     if (photoField) photoField.style.display = 'none';
     if (videoField) videoField.style.display = 'block';
     if (submitBtn) submitBtn.textContent = 'Upload Video';
-    if (photoInput) photoInput.removeAttribute('required');
-    if (videoInput) videoInput.setAttribute('required', 'required');
   } else {
     if (photoField) photoField.style.display = 'block';
     if (videoField) videoField.style.display = 'none';
     if (submitBtn) submitBtn.textContent = 'Upload Photos';
-    if (photoInput) photoInput.setAttribute('required', 'required');
-    if (videoInput) videoInput.removeAttribute('required');
   }
 }
 
@@ -2248,14 +2348,21 @@ function previewVideoInput(input) {
   let file = input.files && input.files[0];
   if (!file) {
     preview.innerHTML = '';
+    selectedAlankarVideoFile = null;
     return;
   }
   let sizeMb = (file.size / (1024 * 1024)).toFixed(2);
   if (file.size > 15 * 1024 * 1024) {
     preview.innerHTML = `<span style="color:#dc2626;">⚠️ फाईल आकार: ${sizeMb} MB. हा व्हिडिओ १५ MB पेक्षा मोठा आहे. कृपया १५ MB पेक्षा लहान व्हिडिओ निवडा.</span>`;
     input.value = '';
+    selectedAlankarVideoFile = null;
   } else {
-    preview.innerHTML = `<span style="color:#15803d;">🎥 निवडलेला व्हिडिओ: ${escapeHtml(file.name)} (${sizeMb} MB)</span>`;
+    selectedAlankarVideoFile = file;
+    preview.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+        <span style="color:#15803d;">🎥 निवडलेला व्हिडिओ: <b>${escapeHtml(file.name)}</b> (${sizeMb} MB)</span>
+        <button type="button" class="media-preview-remove" style="position:static; width:22px; height:22px;" onclick="removeAlankarVideo()" title="Remove">✕</button>
+      </div>`;
   }
 }
 
@@ -2277,9 +2384,12 @@ async function submitAlankarForm(ev) {
 
   // ── Handle Video Upload ──────────────────────────────────────────
   if (mediaType === 'video') {
-    let videoInput = ev.target.querySelector('input[name="video_file"]');
-    let videoFile = videoInput && videoInput.files ? videoInput.files[0] : null;
-    if (!videoFile) return toast('कृपया व्हिडिओ निवडा (Please select a video file)');
+    let videoFile = selectedAlankarVideoFile;
+    if (!videoFile) {
+      let videoInput = ev.target.querySelector('input[type="file"][accept*="video"]');
+      videoFile = videoInput && videoInput.files ? videoInput.files[0] : null;
+    }
+    if (!videoFile) return toast('कृपया व्हिडिओ निवडा किंवा रेकॉर्ड करा (Please select or record a video file)');
 
     let maxBytes = 15 * 1024 * 1024;
     if (videoFile.size > maxBytes) {
@@ -2341,10 +2451,13 @@ async function submitAlankarForm(ev) {
   }
 
   // ── Handle Photos Upload ─────────────────────────────────────────
-  let input = ev.target.querySelector('input[name="image"]');
-  let files = input && input.files ? Array.from(input.files).filter(file => file && file.size && file.type.startsWith('image/')) : [];
+  let files = alankarSelectedPhotos && alankarSelectedPhotos.length ? alankarSelectedPhotos : [];
+  if (!files.length) {
+    let input = ev.target.querySelector('input[type="file"][accept*="image"]');
+    files = input && input.files ? Array.from(input.files).filter(file => file && file.size && file.type.startsWith('image/')) : [];
+  }
 
-  if (!files.length) return toast('Please select at least one photo');
+  if (!files.length) return toast('कृपया किमान एक फोटो निवडा किंवा काढा (Please select or capture at least one photo)');
 
   showLoader(`Uploading ${files.length} photo(s)… please wait`);
   let successCount = 0, failCount = 0;
@@ -2411,6 +2524,13 @@ window.submitAlankarForm = submitAlankarForm;
 window.toggleAlankarMediaType = toggleAlankarMediaType;
 window.previewVideoInput = previewVideoInput;
 window.previewMultiInput = previewMultiInput;
+window.triggerAlankarPhotoCamera = triggerAlankarPhotoCamera;
+window.triggerAlankarPhotoGallery = triggerAlankarPhotoGallery;
+window.onAlankarPhotoSelected = onAlankarPhotoSelected;
+window.removeAlankarPhoto = removeAlankarPhoto;
+window.triggerAlankarVideoCamera = triggerAlankarVideoCamera;
+window.triggerAlankarVideoGallery = triggerAlankarVideoGallery;
+window.removeAlankarVideo = removeAlankarVideo;
 
 /* One-Click Executive Audit Report Bundle Generator */
 function openAuditReportBundle() {
@@ -2546,6 +2666,7 @@ function modal(title, body) {
 }
 
 function closeModal() {
+  selectedExpenseFile = null;
   let modalEl = document.getElementById('modal');
   if (modalEl) modalEl.classList.remove('open');
 }
@@ -2585,8 +2706,71 @@ function previewBillInput(input) {
   });
 }
 
+let selectedExpenseFile = null;
+
+function triggerExpenseCamera() {
+  let inp = document.getElementById('expenseCameraInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function triggerExpenseGallery() {
+  let inp = document.getElementById('expenseGalleryInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function onExpenseFileSelected(input) {
+  let file = input && input.files && input.files[0];
+  if (!file) return;
+  selectedExpenseFile = file;
+  let preview = document.getElementById('billFormPreview');
+  if (!preview) return;
+
+  if (file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'))) {
+    preview.innerHTML = `
+      <div class="bill-preview-box" style="display:flex; align-items:center; gap:10px; padding:8px 12px; background:#fff8f3; border:1px solid #f2dfd3; border-radius:8px; margin-top:8px;">
+        <span style="font-size:26px;">📄</span>
+        <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600; color:#3b251a;">
+          ${escapeHtml(file.name)} (${(file.size / (1024 * 1024)).toFixed(2)} MB)
+        </div>
+        <button type="button" class="media-preview-remove" style="position:static;" onclick="removeExpenseBillPhoto()" title="Remove">✕</button>
+      </div>`;
+    return;
+  }
+
+  let reader = new FileReader();
+  reader.onload = e => {
+    preview.innerHTML = `
+      <div class="bill-preview-box" style="display:flex; align-items:center; gap:10px; padding:8px 12px; background:#fff8f3; border:1px solid #f2dfd3; border-radius:8px; margin-top:8px;">
+        <img src="${e.target.result}" style="width:54px; height:54px; object-fit:cover; border-radius:6px;" alt="Selected bill">
+        <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600; color:#3b251a;">
+          ${escapeHtml(file.name)} (${(file.size / (1024 * 1024)).toFixed(2)} MB)
+        </div>
+        <button type="button" class="media-preview-remove" style="position:static;" onclick="removeExpenseBillPhoto()" title="Remove">✕</button>
+      </div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeExpenseBillPhoto() {
+  selectedExpenseFile = null;
+  let cam = document.getElementById('expenseCameraInput');
+  let gal = document.getElementById('expenseGalleryInput');
+  if (cam) cam.value = '';
+  if (gal) gal.value = '';
+  let preview = document.getElementById('billFormPreview');
+  if (preview) preview.innerHTML = '';
+  let exist = document.getElementById('expenseExistingImage');
+  if (exist) exist.value = '';
+}
+
+window.triggerExpenseCamera = triggerExpenseCamera;
+window.triggerExpenseGallery = triggerExpenseGallery;
+window.onExpenseFileSelected = onExpenseFileSelected;
+window.removeExpenseBillPhoto = removeExpenseBillPhoto;
+
 function openForm(type, item = null) {
   let x = item || {};
+  if (type === 'expense') selectedExpenseFile = null;
   let fields = {
     donation: `
       <div class="field full"><label>Donor / contributor name</label><input name="name" required value="${escapeHtml(x.name || '')}" placeholder="e.g. Patil Family"></div>
@@ -2608,9 +2792,24 @@ function openForm(type, item = null) {
         </select>
       </div>
       <div class="field"><label>Date</label><input name="date" type="date" value="${x.date || today}"></div>
-      <div class="field full"><label>Bill photo (optional)</label><input name="image" type="file" accept="image/*" onchange="previewBillInput(this)"></div>
+      <div class="field full">
+        <label>Bill photo (पावती / बिलाचा फोटो - optional)</label>
+        <div class="media-source-picker">
+          <div class="media-source-buttons">
+            <button type="button" class="media-source-btn camera" onclick="triggerExpenseCamera()">
+              📷 कॅमेऱ्याने फोटो काढा (Camera)
+            </button>
+            <button type="button" class="media-source-btn gallery" onclick="triggerExpenseGallery()">
+              🖼️ गॅलरीमधून निवडा (Gallery)
+            </button>
+          </div>
+          <input id="expenseCameraInput" type="file" accept="image/*" capture="environment" style="display:none;" onchange="onExpenseFileSelected(this)">
+          <input id="expenseGalleryInput" type="file" accept="image/*,application/pdf,.pdf" style="display:none;" onchange="onExpenseFileSelected(this)">
+          <input type="hidden" name="existing_image" id="expenseExistingImage" value="${x.image || ''}">
+        </div>
+      </div>
       <div class="field full" id="billFormPreview">
-        ${x.image ? `<div class="bill-preview-box"><img src="${x.image}" alt="Attached bill"><button type="button" class="text-link" onclick="openBill('${x.image}')">👁 View Full Photo</button></div>` : ''}
+        ${x.image ? `<div class="bill-preview-box" style="display:flex; align-items:center; gap:10px; padding:8px 12px; background:#fff8f3; border:1px solid #f2dfd3; border-radius:8px;"><img src="${x.image}" style="width:54px; height:54px; object-fit:cover; border-radius:6px;" alt="Attached bill"><button type="button" class="text-link" onclick="openBill('${x.image}')">👁 View Full Photo</button><button type="button" class="media-preview-remove" style="position:static; margin-left:auto;" onclick="removeExpenseBillPhoto()" title="Remove">✕</button></div>` : ''}
       </div>
     `,
     aarti: `
@@ -2777,7 +2976,9 @@ async function submitForm(ev, type, id) {
     showLoader('माहिती सेव्ह होत आहे... (Saving...)');
   }
 
-  let file = f.get('image');
+  let file = (type === 'expense' && selectedExpenseFile) ? selectedExpenseFile : f.get('image');
+  let existingImg = (type === 'expense') ? f.get('existing_image') : null;
+
   if (file && file.size) {
     let isPdf = file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'));
     if (isPdf) {
@@ -2798,11 +2999,23 @@ async function submitForm(ev, type, id) {
       await saveItem(type, id, o);
     }
   } else {
-    let list = db[listName[type]];
-    let existingItem = id && list ? list.find(x => String(x.id) === String(id)) : null;
-    o.image = (existingItem && hasValidImage(existingItem.image)) ? existingItem.image : '';
+    if (type === 'expense') {
+      if (existingImg === '') {
+        o.image = '';
+        o.clearImage = true;
+      } else if (hasValidImage(existingImg)) {
+        o.image = existingImg;
+      } else {
+        o.image = '';
+      }
+    } else {
+      let list = db[listName[type]];
+      let existingItem = id && list ? list.find(x => String(x.id) === String(id)) : null;
+      o.image = (existingItem && hasValidImage(existingItem.image)) ? existingItem.image : '';
+    }
     await saveItem(type, id, o);
   }
+  selectedExpenseFile = null;
 }
 
 async function saveItem(type, id, o) {
@@ -2810,11 +3023,17 @@ async function saveItem(type, id, o) {
   let index = id ? list.findIndex(x => String(x.id) === String(id)) : -1;
   if (id) {
     o.id = id;
-    o.image = hasValidImage(o.image) ? o.image : ((list[index] && hasValidImage(list[index].image)) ? list[index].image : '');
+    if (o.clearImage) {
+      o.image = '';
+    } else {
+      o.image = hasValidImage(o.image) ? o.image : ((list[index] && hasValidImage(list[index].image)) ? list[index].image : '');
+    }
+    delete o.clearImage;
     list[index] = o;
   } else {
     o.id = type[0] + (Date.now().toString().slice(-5));
     o.image = hasValidImage(o.image) ? o.image : '';
+    delete o.clearImage;
     list.unshift(o);
   }
   save();

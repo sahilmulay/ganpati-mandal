@@ -812,6 +812,296 @@ body {
   border-color: #8b261e;
 }
 
+/* ── WhatsApp-style Day Media Collage ─────────────────────────── */
+.wa-collage-card {
+  background: #ffffff;
+  border: 1px solid #f0e2d5;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(107, 57, 23, 0.08);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.wa-collage-grid {
+  display: grid;
+  gap: 3px;
+  background: #0d0805;
+  width: 100%;
+}
+
+.wa-collage-grid.count-1 {
+  grid-template-columns: 1fr;
+}
+.wa-collage-grid.count-1 .wa-collage-item {
+  aspect-ratio: 16 / 10;
+  max-height: 380px;
+}
+
+.wa-collage-grid.count-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.wa-collage-grid.count-2 .wa-collage-item {
+  aspect-ratio: 1 / 1;
+}
+
+.wa-collage-grid.count-3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.wa-collage-grid.count-3 .wa-collage-item:nth-child(1) {
+  grid-row: span 2;
+  aspect-ratio: auto;
+}
+.wa-collage-grid.count-3 .wa-collage-item:nth-child(2),
+.wa-collage-grid.count-3 .wa-collage-item:nth-child(3) {
+  aspect-ratio: 1 / 1;
+}
+
+.wa-collage-grid.count-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.wa-collage-grid.count-4 .wa-collage-item {
+  aspect-ratio: 1 / 1;
+}
+
+.wa-collage-item {
+  position: relative;
+  overflow: hidden;
+  background: #140c07;
+  cursor: pointer;
+  display: block;
+}
+
+.wa-collage-item img,
+.wa-collage-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.25s ease;
+}
+
+.wa-collage-item:hover img,
+.wa-collage-item:hover video {
+  transform: scale(1.03);
+}
+
+/* WhatsApp-style Video Play Icon Overlay */
+.wa-play-btn {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.wa-play-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(2px);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  padding-left: 3px;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.wa-collage-item:hover .wa-play-icon {
+  transform: scale(1.1);
+  background: rgba(159, 46, 32, 0.85);
+}
+
+.wa-badge-hd {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+/* WhatsApp +N More Overlay on 4th block */
+.wa-collage-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.58);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  z-index: 3;
+  backdrop-filter: blur(2px);
+  transition: background 0.2s ease;
+}
+
+.wa-collage-item:hover .wa-collage-overlay {
+  background: rgba(0, 0, 0, 0.42);
+}
+
+/* Day Collage Footer Bar */
+.wa-collage-footer {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border-top: 1px solid #f2e3d5;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wa-collage-caption {
+  font-size: 12.5px;
+  color: #3b251a;
+  font-weight: 600;
+  flex: 1;
+  min-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wa-collage-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wa-view-all-btn {
+  background: #fff8f3;
+  border: 1px solid #f0d5c4;
+  color: #8b261e;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.wa-view-all-btn:hover {
+  background: #8b261e;
+  color: #ffffff;
+  border-color: #8b261e;
+}
+
+/* ── Media Source Picker (Camera vs Gallery) ───────────────────── */
+.media-source-picker {
+  margin-top: 6px;
+}
+
+.media-source-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.media-source-btn {
+  flex: 1;
+  min-width: 130px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  border: 1.5px solid;
+}
+
+.media-source-btn.camera {
+  background: #fff8f5;
+  border-color: #f2bfb3;
+  color: #9f2e20;
+}
+
+.media-source-btn.camera:hover {
+  background: #fde8e3;
+  border-color: #9f2e20;
+  transform: translateY(-1px);
+}
+
+.media-source-btn.gallery {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.media-source-btn.gallery:hover {
+  background: #f1f5f9;
+  border-color: #64748b;
+  transform: translateY(-1px);
+}
+
+.media-preview-container {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.media-preview-item {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1.5px solid #e2d3c5;
+  background: #1a1008;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.media-preview-item img,
+.media-preview-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-preview-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(220, 38, 38, 0.9);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
 /* Public Mobile Responsive Adjustments */
 @media (max-width: 600px) {
   .public-container { padding: 10px 8px 30px; }
