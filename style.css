@@ -136,7 +136,9 @@ body {
 
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 0 0 23px; }
 .stat-card { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 17px; box-shadow: 0 4px 17px rgba(107, 57, 23, .035); }
-.stat-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 11px; }
+.stat-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 11px; font-weight: 700; }
+.stat-head span:first-child,
+.stat-head .stat-title { font-weight: 800; color: #3b251a; }
 .stat-icon { height: 29px; width: 29px; border-radius: 9px; display: grid; place-items: center; font-size: 15px; }
 .money { font-size: clamp(16px, 2.5vw, 22px); font-weight: 800; margin-top: 11px; letter-spacing: -0.5px; }
 .stat-card.income .stat-icon { background: #e5f6e9; }
@@ -608,6 +610,31 @@ body {
   font-size: 11px;
   font-weight: 600;
   margin-top: 8px;
+}
+
+/* Public Portal Top Stats Cards */
+.public-portal-body .stats {
+  margin-bottom: 20px;
+}
+.public-portal-body .stat-head {
+  color: #2c1b18;
+  font-size: 11px;
+}
+.public-portal-body .stat-head span:first-child,
+.public-portal-body .stat-head .stat-title,
+.public-portal-body .stat-head b,
+.public-portal-body .stat-head strong {
+  font-weight: 800;
+  color: #2c1b18;
+  letter-spacing: -0.1px;
+}
+@media (max-width: 600px) {
+  .public-portal-body .stat-head span:first-child,
+  .public-portal-body .stat-head .stat-title,
+  .public-portal-body .stat-head b,
+  .public-portal-body .stat-head strong {
+    font-size: 9.5px;
+  }
 }
 
 /* Alankar Mukh Darshan Photo & Video Gallery */

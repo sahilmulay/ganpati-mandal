@@ -362,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v30';
+const DATA_VERSION = '2026-mandal-prod-v31';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -1306,7 +1306,23 @@ function publicView() {
         <span class="public-header-badge">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
       </div>
 
-      <!-- Section 1: Daily Bappa Alankar & Mukh Darshan Gallery -->
+      <!-- Section 1: Financial Summary Cards (On Top) -->
+      <section class="stats" style="margin-bottom:20px;">
+        <div class="stat-card income">
+          <div class="stat-head"><span class="stat-title"><b>एकूण जमा (Total Collection)</b></span><span class="stat-icon">↗</span></div>
+          <div class="money">${rupees(inc)}</div>
+        </div>
+        <div class="stat-card expense">
+          <div class="stat-head"><span class="stat-title"><b>एकूण खर्च (Total Expenses)</b></span><span class="stat-icon">↘</span></div>
+          <div class="money">${rupees(exp)}</div>
+        </div>
+        <div class="stat-card balance">
+          <div class="stat-head"><span class="stat-title"><b>शिल्लक (Net Balance)</b></span><span class="stat-icon">◈</span></div>
+          <div class="money">${rupees(bal)}</div>
+        </div>
+      </section>
+
+      <!-- Section 2: Daily Bappa Alankar & Mukh Darshan Gallery -->
       <div class="card" style="margin-bottom:20px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
           <h3>🌺 ${galleryHeading}</h3>
@@ -1314,23 +1330,6 @@ function publicView() {
         </div>
         ${galleryHtml}
       </div>
-
-
-      <!-- Section 2: Financial Summary Cards -->
-      <section class="stats" style="margin-bottom:20px;">
-        <div class="stat-card income">
-          <div class="stat-head"><span>एकूण जमा (Total Collection)</span><span class="stat-icon">↗</span></div>
-          <div class="money">${rupees(inc)}</div>
-        </div>
-        <div class="stat-card expense">
-          <div class="stat-head"><span>एकूण खर्च (Total Expenses)</span><span class="stat-icon">↘</span></div>
-          <div class="money">${rupees(exp)}</div>
-        </div>
-        <div class="stat-card balance">
-          <div class="stat-head"><span>शिल्लक (Net Balance)</span><span class="stat-icon">◈</span></div>
-          <div class="money">${rupees(bal)}</div>
-        </div>
-      </section>
 
       <!-- Section 3: Aarti Timetable (2 Days Shown + View More Toggle) & Announcements -->
       <div class="layout-split" style="margin-bottom:20px;">
