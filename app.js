@@ -362,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v33';
+const DATA_VERSION = '2026-mandal-prod-v34';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -3821,6 +3821,73 @@ function toast(t, duration = 2400) {
   el._timer = setTimeout(() => el.className = 'toast', duration);
 }
 
+const BAPPA_SYMBOLS = [
+  '🌺', // लाल जास्वंद (Red Hibiscus)
+  '🐭', // मूषकराज (Mouse)
+  '🥮', // उकडीचे मोदक (Modak)
+  '🐘', // गजानन (Gajanana / Elephant)
+  '🪷', // कमळ (Lotus)
+  '🪔', // मंगल दीप (Diya)
+  '🕉️', // ॐकार (Omkar)
+  '🔔'  // मंगल घंटा (Temple bell)
+];
+
+const BAPPA_FACTS = [
+  'मूषकराज (उंदीर) हे बाप्पाचे वाहन आहे, जे चंचलता आणि अहंकार नियंत्रणाचे प्रतीक मानले जाते.',
+  'बाप्पाला २१ मोदक आणि २१ दुर्वांची जुडी अर्पण करण्याची प्राचीन मंगलमय परंपरा आहे.',
+  'महर्षी व्यासांचे महाभारत अखंड लिहिण्यासाठी गणरायाने स्वतःचा एक दात अर्पण केला, म्हणून त्यांना "एकदंत" म्हणतात.',
+  'लोकमान्य टिळकांनी १८९३ मध्ये सार्वजनिक गणेशोत्सवाची सुरुवात करून समाजाला एकत्र आणले.',
+  'गणपती बाप्पाच्या १२ प्रमुख नावांचे स्मरण केल्याने सर्व संकटांचे निवारण होते, अशी श्रद्धा आहे.',
+  'बाप्पाचे मोठे कान उत्तम श्रवण करण्याचे आणि लहान मुख मोजके व गोड बोलण्याचे प्रतीक आहे.',
+  'लाल जास्वंदाचे फूल आणि दुर्वा गणपती बाप्पाचे अत्यंत प्रिय मानले जातात.',
+  'गणरायाचे मोठे उदर (लंबोदर) हे संपूर्ण विश्वातील सुख-दुःख सामावून घेण्याची शिकवण देते.'
+];
+
+let _bappaFactInterval = null;
+let _bappaSymbolIdx = 0;
+let _bappaFactIdx = 0;
+
+function setupBappaLoader(symbolElId, factElId) {
+  _bappaSymbolIdx = 0;
+  _bappaFactIdx = Math.floor(Math.random() * BAPPA_FACTS.length);
+
+  let symEl = document.getElementById(symbolElId);
+  if (symEl) {
+    symEl.textContent = BAPPA_SYMBOLS[_bappaSymbolIdx];
+    symEl.onanimationiteration = () => {
+      _bappaSymbolIdx = (_bappaSymbolIdx + 1) % BAPPA_SYMBOLS.length;
+      symEl.textContent = BAPPA_SYMBOLS[_bappaSymbolIdx];
+    };
+  }
+
+  let factEl = document.getElementById(factElId);
+  if (factEl) {
+    factEl.textContent = BAPPA_FACTS[_bappaFactIdx];
+    if (_bappaFactInterval) clearInterval(_bappaFactInterval);
+    _bappaFactInterval = setInterval(() => {
+      let currentFactEl = document.getElementById(factElId);
+      if (!currentFactEl) {
+        clearInterval(_bappaFactInterval);
+        _bappaFactInterval = null;
+        return;
+      }
+      currentFactEl.classList.add('fading');
+      setTimeout(() => {
+        _bappaFactIdx = (_bappaFactIdx + 1) % BAPPA_FACTS.length;
+        currentFactEl.textContent = BAPPA_FACTS[_bappaFactIdx];
+        currentFactEl.classList.remove('fading');
+      }, 300);
+    }, 3600);
+  }
+}
+
+function clearBappaLoaderTimers() {
+  if (_bappaFactInterval) {
+    clearInterval(_bappaFactInterval);
+    _bappaFactInterval = null;
+  }
+}
+
 function showLoader(msg = 'कृपया प्रतीक्षा करा... (Please wait)') {
   let el = document.getElementById('appLoader');
   if (!el) {
@@ -3829,18 +3896,29 @@ function showLoader(msg = 'कृपया प्रतीक्षा करा
     el.className = 'app-loader-overlay';
     document.body.appendChild(el);
   }
+  let initialFact = BAPPA_FACTS[Math.floor(Math.random() * BAPPA_FACTS.length)];
   el.innerHTML = `
     <div class="app-loader-card">
-      <div class="app-spinner"></div>
+      <div class="bappa-spin-container" style="width:64px; height:64px; margin-bottom:0;">
+        <div id="bappaModalSpinner" class="bappa-spin-symbol" style="font-size:32px;">${BAPPA_SYMBOLS[0]}</div>
+      </div>
       <div class="app-loader-text">${escapeHtml(msg)}</div>
+      <div class="bappa-fact-box" style="max-width:320px; margin-top:4px; padding:10px 14px;">
+        <div class="bappa-fact-badge" style="font-size:10px; padding:2px 10px; margin-bottom:6px;">✨ माहीत आहे का?</div>
+        <div id="bappaModalFact" class="bappa-fact-content" style="font-size:11.5px; min-height:40px;">
+          ${escapeHtml(initialFact)}
+        </div>
+      </div>
     </div>
   `;
   el.classList.add('show');
+  setupBappaLoader('bappaModalSpinner', 'bappaModalFact');
 }
 
 function hideLoader() {
   let el = document.getElementById('appLoader');
   if (el) el.classList.remove('show');
+  clearBappaLoaderTimers();
 }
 
 
@@ -3887,11 +3965,20 @@ async function loadPublicMandalData() {
   let target = document.getElementById('page');
   if (target) {
     target.innerHTML = `
-      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:16px; padding:32px; text-align:center;">
-        <div style="font-size:48px; animation:appSpin 1.2s linear infinite; display:inline-block;">🪷</div>
-        <div style="font-size:18px; font-weight:700; color:#9f2e20;">श्री गणेशाय नमः</div>
-        <div style="font-size:14px; color:#7a5c55;">माहिती लोड होत आहे… (Loading data…)</div>
+      <div class="bappa-loader-wrap">
+        <div class="bappa-spin-container">
+          <div id="bappaPublicSpinner" class="bappa-spin-symbol">${BAPPA_SYMBOLS[0]}</div>
+        </div>
+        <h2 class="bappa-loader-heading">॥ श्री गणेशाय नमः ॥</h2>
+        <div class="bappa-loader-status">माहिती लोड होत आहे… (Loading data…)</div>
+        <div class="bappa-fact-box">
+          <div class="bappa-fact-badge">✨ माहीत आहे का? (Did you know?)</div>
+          <div id="bappaPublicFact" class="bappa-fact-content">
+            ${BAPPA_FACTS[0]}
+          </div>
+        </div>
       </div>`;
+    setupBappaLoader('bappaPublicSpinner', 'bappaPublicFact');
   }
 
   // 1. Fetch mandal metadata (Cloud client with automatic direct REST API fallback)
@@ -3925,6 +4012,7 @@ async function loadPublicMandalData() {
   }
 
   if (!mandalData) {
+    clearBappaLoaderTimers();
     if (target) {
       target.innerHTML = `
         <div class="public-container" style="max-width:500px; margin:50px auto; padding:20px; text-align:center;">
@@ -3983,6 +4071,7 @@ async function loadPublicMandalData() {
 
   // 5. Render public view safely
   try {
+    clearBappaLoaderTimers();
     render();
   } catch(renderErr) {
     console.error('Public portal render error:', renderErr);

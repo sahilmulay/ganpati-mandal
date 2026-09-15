@@ -473,6 +473,114 @@ body {
   color: #3b1812;
 }
 
+/* ── Bappa Dynamic Loader & Fact Carousel ───────────────────────── */
+.bappa-loader-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 65vh;
+  gap: 14px;
+  padding: 32px 16px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.bappa-spin-container {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff7ed 0%, #ffedd5 100%);
+  border: 2px solid #fbd0b4;
+  box-shadow: 0 8px 24px rgba(159, 46, 32, 0.12), inset 0 2px 6px rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.bappa-spin-symbol {
+  font-size: 40px;
+  line-height: 1;
+  display: inline-block;
+  animation: bappaRotation 1.35s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  transform-origin: center center;
+  user-select: none;
+}
+
+@keyframes bappaRotation {
+  0% {
+    transform: rotate(0deg) scale(0.92);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(360deg) scale(0.92);
+  }
+}
+
+.bappa-loader-heading {
+  font-size: 19px;
+  font-weight: 800;
+  color: #8b1e3f;
+  margin: 0;
+  letter-spacing: 0.5px;
+  font-family: 'Noto Sans Devanagari', sans-serif;
+}
+
+.bappa-loader-status {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #6e4e42;
+  margin-top: -4px;
+}
+
+.bappa-fact-box {
+  margin-top: 16px;
+  max-width: 360px;
+  width: 100%;
+  background: #ffffff;
+  border: 1.5px solid #ebd7c8;
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 16px rgba(107, 57, 23, 0.06);
+  box-sizing: border-box;
+}
+
+.bappa-fact-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff0e3;
+  color: #9f2e20;
+  border: 1px solid #f2cdb5;
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  margin-bottom: 8px;
+}
+
+.bappa-fact-content {
+  font-size: 12.5px;
+  color: #3b251a;
+  line-height: 1.55;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  font-weight: 500;
+}
+
+.bappa-fact-content.fading {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
 /* Desktop vs Mobile Display Toggles & Comprehensive Breakpoints */
 @media (min-width: 769px) {
   .mobile-nav { display: none; }
