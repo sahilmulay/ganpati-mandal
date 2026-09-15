@@ -1596,6 +1596,69 @@ body {
   box-shadow: 0 2px 10px rgba(107, 57, 23, 0.04);
 }
 
+/* ── Public Portal Live Visitor Badge ───────────────────────────── */
+.public-visitor-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1.5px solid #ecd8cb;
+  border-radius: 30px;
+  padding: 6px 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 8px rgba(107, 57, 23, 0.05);
+  font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', sans-serif;
+}
+
+.visitor-badge-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.visitor-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+  animation: visitorPulse 2s infinite;
+}
+
+@keyframes visitorPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(22, 163, 74, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+  }
+}
+
+.visitor-label {
+  font-size: 11.5px;
+  color: #6e4e42;
+  font-weight: 600;
+}
+
+.visitor-count-number {
+  background: #fff3e8;
+  color: #8b261e;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  border: 1px solid #f2cfb6;
+  letter-spacing: 0.5px;
+  min-width: 24px;
+  text-align: center;
+}
+
 .public-footer-top {
   font-size: 12px;
   color: #7a5c4d;

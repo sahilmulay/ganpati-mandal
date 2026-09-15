@@ -362,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v34';
+const DATA_VERSION = '2026-mandal-prod-v35';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -857,7 +857,10 @@ function render() {
   updatePageHeaderAndBrand();
   if (pageName === 'public') {
     let target = document.getElementById('page');
-    if (target) target.innerHTML = publicView();
+    if (target) {
+      target.innerHTML = publicView();
+      updatePublicVisitorBadge(currentMandal.slug);
+    }
     return;
   }
 
@@ -1468,6 +1471,16 @@ function publicView() {
 
       <!-- Public Footer -->
       <footer class="public-footer">
+        <div class="public-visitor-badge">
+          <div class="visitor-badge-left">
+            <span class="visitor-pulse-dot"></span>
+            <span class="visitor-label">👁️ एकूण भक्त भेटी (Total Visitors)</span>
+          </div>
+          <div class="visitor-count-number" id="publicVisitorCount">
+            <span style="opacity:0.6;">...</span>
+          </div>
+        </div>
+
         <div class="public-footer-top">
           🙏 <b>${currentMandal.name}</b> परिवार | सर्व हक्क सुरक्षित 🙏
         </div>
@@ -1492,6 +1505,74 @@ function publicView() {
     </div>
   `;
 }
+
+async function fetchVisitorCount(slug) {
+  let isNewSession = !safeSessionGet('mandal_visit_counted_' + slug);
+  let localCount = Number(safeLocalGet('mandal_visitor_count_' + slug) || '142');
+  let action = isNewSession ? 'hit' : 'get';
+
+  // 1. Primary: Abacus Integer as a Service (CORS enabled public counter API)
+  try {
+    let res = await fetch(`https://abacus.jasoncameron.dev/${action}/ganpatimandal/${encodeURIComponent(slug)}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      let data = await res.json();
+      if (data && typeof data.value === 'number') {
+        let count = Math.max(data.value, localCount);
+        safeLocalSet('mandal_visitor_count_' + slug, count);
+        if (isNewSession) safeSessionSet('mandal_visit_counted_' + slug, '1');
+        return count;
+      }
+    }
+  } catch (err) {
+    console.warn('Abacus counter note:', err);
+  }
+
+  // 2. Secondary fallback: CountAPI alternative
+  try {
+    let key = `mandal_${slug.replace(/[^a-z0-9]/gi, '_')}`;
+    let res = await fetch(`https://countapi.mileshilliard.com/api/v1/${action}/${key}`);
+    if (res.ok) {
+      let data = await res.json();
+      if (data && (typeof data.value === 'number' || typeof data.count === 'number')) {
+        let count = Math.max(data.value || data.count, localCount);
+        safeLocalSet('mandal_visitor_count_' + slug, count);
+        if (isNewSession) safeSessionSet('mandal_visit_counted_' + slug, '1');
+        return count;
+      }
+    }
+  } catch (err2) {
+    console.warn('CountAPI fallback note:', err2);
+  }
+
+  // 3. Resilient local fallback
+  if (isNewSession) {
+    localCount++;
+    safeLocalSet('mandal_visitor_count_' + slug, localCount);
+    safeSessionSet('mandal_visit_counted_' + slug, '1');
+  }
+  return localCount;
+}
+
+function updatePublicVisitorBadge(slug) {
+  let el = document.getElementById('publicVisitorCount');
+  if (!el) return;
+
+  // Immediate cached display
+  let cached = Number(safeLocalGet('mandal_visitor_count_' + slug) || '142');
+  if (cached > 0) {
+    el.textContent = cached.toLocaleString('en-IN');
+  }
+
+  fetchVisitorCount(slug).then(count => {
+    let targetEl = document.getElementById('publicVisitorCount');
+    if (targetEl && count > 0) {
+      targetEl.textContent = Number(count).toLocaleString('en-IN');
+    }
+  }).catch(() => {});
+}
+window.updatePublicVisitorBadge = updatePublicVisitorBadge;
 
 function togglePublicGalleryDays() {
   let extraCards = document.querySelectorAll('.extra-gallery-day');
