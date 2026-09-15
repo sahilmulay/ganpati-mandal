@@ -362,7 +362,7 @@ const seed = {
 };
 
 // Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v32';
+const DATA_VERSION = '2026-mandal-prod-v33';
 const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
 try {
   let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
@@ -1169,7 +1169,12 @@ function publicView() {
       dayMap.get(d).push(item);
     });
 
-    galleryHtml = Array.from(dayMap.entries()).map(([dateKey, items]) => {
+    let dayEntries = Array.from(dayMap.entries());
+    let totalDays = dayEntries.length;
+    let hasMoreDays = totalDays > 2;
+
+    let dayCardsHtml = dayEntries.map(([dateKey, items], dayIndex) => {
+      let isExtra = dayIndex >= 2;
       let photoCount = items.filter(x => !(x.type === 'video' || isVideoData(x.image))).length;
       let videoCount = items.filter(x => x.type === 'video' || isVideoData(x.image)).length;
       let countBadge = [];
@@ -1209,7 +1214,7 @@ function publicView() {
       let filename = `bappa_${safeTitle}_${dateKey || today}.${ext}`;
 
       return `
-        <div class="alankar-day-group">
+        <div class="alankar-day-group ${isExtra ? 'extra-gallery-day' : ''}" style="${isExtra ? 'display:none;' : ''}">
           <div class="alankar-day-header">
             <div class="alankar-day-title">
               <span>📅</span>
@@ -1238,6 +1243,16 @@ function publicView() {
         </div>
       `;
     }).join('');
+
+    let toggleBtnHtml = hasMoreDays ? `
+      <div style="text-align:center; margin-top:14px; padding-top:12px; border-top:1px dashed #e8d5c4;">
+        <button id="publicGalleryToggleBtn" class="public-gallery-toggle-btn" onclick="togglePublicGalleryDays()">
+          ▼ सर्व ${totalDays} दिवसांचे फोटो व व्हिडिओ पहा (View all ${totalDays} days)
+        </button>
+      </div>
+    ` : '';
+
+    galleryHtml = dayCardsHtml + toggleBtnHtml;
   }
 
   let galleryHeading = (currentMandal.slug === 'vrindavan' || (currentMandal.name && currentMandal.name.includes('वृंदावन')))
@@ -1477,6 +1492,25 @@ function publicView() {
     </div>
   `;
 }
+
+function togglePublicGalleryDays() {
+  let extraCards = document.querySelectorAll('.extra-gallery-day');
+  let btn = document.getElementById('publicGalleryToggleBtn');
+  if (!extraCards.length || !btn) return;
+  let isHidden = extraCards[0].style.display === 'none';
+  extraCards.forEach(r => r.style.display = isHidden ? '' : 'none');
+  let totalDays = document.querySelectorAll('.alankar-day-group').length;
+  btn.textContent = isHidden
+    ? '▲ कमी दाखवा (View less)'
+    : `▼ सर्व ${totalDays} दिवसांचे फोटो व व्हिडिओ पहा (View all ${totalDays} days)`;
+  if (!isHidden) {
+    let gallerySection = btn.closest('.card');
+    if (gallerySection) {
+      gallerySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+}
+window.togglePublicGalleryDays = togglePublicGalleryDays;
 
 function togglePublicAartis() {
   let extraCards = document.querySelectorAll('.extra-aarti-card');

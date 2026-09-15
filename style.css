@@ -641,6 +641,40 @@ body {
 .alankar-day-group {
   margin-bottom: 24px;
 }
+.extra-gallery-day {
+  animation: fadeInDay 0.25s ease-in-out;
+}
+@keyframes fadeInDay {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.public-gallery-toggle-btn {
+  background: #fff8f3;
+  color: #8b261e;
+  border: 1.5px solid #e0beaf;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 10px 22px;
+  border-radius: 25px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(139, 38, 30, 0.08);
+  transition: all 0.2s ease;
+  min-height: 44px;
+}
+.public-gallery-toggle-btn:hover {
+  background: #8b261e;
+  color: #ffffff;
+  border-color: #8b261e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 38, 30, 0.2);
+}
+.public-gallery-toggle-btn:active {
+  transform: scale(0.98);
+}
 
 .alankar-day-header {
   display: flex;
