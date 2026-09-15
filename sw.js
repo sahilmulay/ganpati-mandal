@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mandal-app-v43';
+const CACHE_NAME = 'mandal-app-v44';
 const ASSETS = [
   './',
   './index.html',

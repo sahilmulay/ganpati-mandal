@@ -361,15 +361,14 @@ const seed = {
   }
 };
 
-// Automatic one-time client reset for fresh production festival records
-const DATA_VERSION = '2026-mandal-prod-v35';
-const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default');
+// Active Mandal storage key
+const mandalStorageId = safeSessionGet('mandal_id') || '00000000-0000-0000-0000-000000000001';
+const LOCAL_STORAGE_KEY = 'ganesh-mandal-data-' + mandalStorageId;
+const DATA_VERSION = '2026-mandal-prod-v36';
+
+// NEVER WIPE USER DATA! Version tracking is for metadata migrations only.
 try {
-  let storedVer = safeLocalGet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'));
-  if (storedVer !== DATA_VERSION) {
-    safeLocalRemove(LOCAL_STORAGE_KEY);
-    safeLocalSet('mandal-data-version-' + (safeSessionGet('mandal_id') || 'default'), DATA_VERSION);
-  }
+  safeLocalSet('mandal-data-version-' + mandalStorageId, DATA_VERSION);
 } catch(e) {}
 
 let db = null;
@@ -377,6 +376,36 @@ try {
   let raw = safeLocalGet(LOCAL_STORAGE_KEY);
   if (raw) db = JSON.parse(raw);
 } catch(e) {}
+
+// Data recovery fallback: check all previous localStorage keys so user never loses records
+if (!db || (!db.expenses?.length && !db.donations?.length)) {
+  const legacyCandidateKeys = [
+    'ganesh-mandal-data-' + (safeSessionGet('mandal_id') || 'default'),
+    'ganesh-mandal-data-00000000-0000-0000-0000-000000000001',
+    'ganesh-mandal-data-default',
+    'ganesh-mandal-data'
+  ];
+  for (let k of legacyCandidateKeys) {
+    try {
+      let candRaw = safeLocalGet(k);
+      if (candRaw) {
+        let parsed = JSON.parse(candRaw);
+        if (parsed && (parsed.expenses?.length || parsed.donations?.length)) {
+          if (!db) db = parsed;
+          else {
+            if (!db.expenses?.length && parsed.expenses?.length) db.expenses = parsed.expenses;
+            if (!db.donations?.length && parsed.donations?.length) db.donations = parsed.donations;
+            if (!db.contacts?.length && parsed.contacts?.length) db.contacts = parsed.contacts;
+            if (!db.aartis?.length && parsed.aartis?.length) db.aartis = parsed.aartis;
+            if (!db.events?.length && parsed.events?.length) db.events = parsed.events;
+          }
+          break;
+        }
+      }
+    } catch(e) {}
+  }
+}
+
 if (!db || typeof db !== 'object') db = JSON.parse(JSON.stringify(seed));
 if (!db.alankar) db.alankar = [];
 if (!db.documents) db.documents = [];
@@ -385,7 +414,6 @@ if (!db.expenses) db.expenses = [];
 if (!db.aartis) db.aartis = [];
 if (!db.events) db.events = [];
 if (!db.contacts) db.contacts = [];
-// Aarti times are per-record and configurable; not forced-overridden.
 if (!db.settings) db.settings = seed.settings;
 if (!db.settings.morningAartiTime) db.settings.morningAartiTime = '09:00';
 if (!db.settings.eveningAartiTime) db.settings.eveningAartiTime = '20:00';
@@ -684,79 +712,155 @@ function _cloudFingerprint() {
   }).join('|');
 }
 
-async function loadCloud() {
-  if (!cloud) return;
-  let types = Object.keys(tableName);
+/* Helper: Strip heavy base64 strings before saving to localStorage to prevent QuotaExceededError */
+function getStorageSafeDb(source) {
+  return {
+    donations: source.donations || [],
+    expenses: (source.expenses || []).map(e => {
+      if (e.image && e.image.length > 150000 && e.id && String(e.id).includes('-')) {
+        let c = { ...e };
+        delete c.image;
+        return c;
+      }
+      return e;
+    }),
+    aartis: source.aartis || [],
+    events: (source.events || []).map(ev => {
+      if (ev.image && ev.image.length > 150000) {
+        let c = { ...ev };
+        delete c.image;
+        return c;
+      }
+      return ev;
+    }),
+    contacts: source.contacts || [],
+    settings: source.settings || seed.settings,
+    alankar: (source.alankar || []).map(a => {
+      let c = { ...a };
+      if (c.image && c.image.startsWith('data:') && c.image.length > 80000) c.image = '';
+      return c;
+    }),
+    documents: (source.documents || []).map(d => {
+      let c = { ...d };
+      if (c.image && c.image.startsWith('data:') && c.image.length > 80000) c.image = '';
+      return c;
+    })
+  };
+}
 
-  let updatedAny = false;
-  await Promise.allSettled(types.map(async (type) => {
+let _lastCloudSyncTime = 0;
+let _syncingCloud = false;
+
+async function loadCloud(force = false) {
+  if (!cloud || _syncingCloud) return;
+
+  let now = Date.now();
+  // Throttle automatic polling/focus calls to avoid hammering DB & network (force=true bypasses)
+  if (!force && (now - _lastCloudSyncTime < 45000)) return;
+
+  _syncingCloud = true;
+  _lastCloudSyncTime = now;
+
+  let curPage = detectCurrentPage();
+
+  // Page-aware priority loading: NEVER download 15MB alankar photos or documents on unrelated pages!
+  let priorityTables = [];
+  let secondaryTables = [];
+
+  if (curPage === 'expenses') {
+    priorityTables = ['expense'];
+    secondaryTables = ['donation', 'contact'];
+  } else if (curPage === 'donations') {
+    priorityTables = ['donation'];
+    secondaryTables = ['expense', 'contact'];
+  } else if (curPage === 'contacts') {
+    priorityTables = ['contact'];
+    secondaryTables = ['donation', 'expense'];
+  } else if (curPage === 'aarti') {
+    priorityTables = ['aarti'];
+    secondaryTables = ['event'];
+  } else if (curPage === 'events') {
+    priorityTables = ['event'];
+    secondaryTables = ['aarti'];
+  } else if (curPage === 'documents') {
+    priorityTables = ['document'];
+    secondaryTables = [];
+  } else if (curPage === 'public') {
+    // Financial stats, aartis, events, contacts first (<150ms); alankar gallery photos load in background
+    priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact'];
+    secondaryTables = ['alankar'];
+  } else {
+    // Dashboard & Reports
+    priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact'];
+    secondaryTables = [];
+  }
+
+  async function fetchTable(type) {
     try {
       let { data, error } = await cloud.from(tableName[type]).select('*').eq('mandal_id', currentMandal.id);
       if (error) {
-        if (error.code === 'PGRST205') return;
+        if (error.code === 'PGRST205') return false;
         console.warn(`Supabase ${type} fetch error:`, error.message);
-        return;
+        return false;
       }
       if (Array.isArray(data)) {
         let cloudRows = data.map(row => fromCloud(type, row));
         if (cloudRows.length > 0) {
           db[listName[type]] = cloudRows;
-          updatedAny = true;
+          return true;
         } else if (db[listName[type]] && db[listName[type]].length > 0) {
-          if (type === 'document' && cloud) {
-            db[listName[type]].forEach(localDoc => {
-              let p = {
-                id: localDoc.id,
-                mandal_id: currentMandal.id,
-                title: localDoc.title || '',
-                category: localDoc.category || '',
-                icon: localDoc.icon || '📁',
-                outward_no: localDoc.outwardNo || '',
-                issued_by: localDoc.issuedBy || '',
-                valid_from: localDoc.validFrom || '',
-                valid_until: localDoc.validUntil || '',
-                status: localDoc.status || 'Pending',
-                note: localDoc.note || '',
-                image: localDoc.image || ''
-              };
-              cloud.from('documents').upsert(p).then(() => {});
-            });
-          }
+          return false;
         } else {
           db[listName[type]] = [];
+          return false;
         }
       }
     } catch (err) {
       console.warn(`Cloud load error for ${type}:`, err);
     }
-  }));
+    return false;
+  }
 
-  if (updatedAny) {
-    let newFp = _cloudFingerprint();
-    if (detectCurrentPage() !== 'public') {
-      try {
-        safeLocalSet(LOCAL_STORAGE_KEY, JSON.stringify(db));
-      } catch (quotaErr) {
-        console.warn('localStorage quota note:', quotaErr.message || quotaErr);
+  try {
+    // Phase 1: Fetch priority table(s) and RENDER IMMEDIATELY upon arrival (~100-200ms)
+    let anyPriorityUpdated = false;
+    await Promise.allSettled(priorityTables.map(async (type) => {
+      let updated = await fetchTable(type);
+      if (updated) {
+        anyPriorityUpdated = true;
+        save();
+        render(); // Instant screen refresh with latest records!
       }
+      return updated;
+    }));
+
+    // Phase 2: Fetch secondary tables quietly in background without blocking UI
+    if (secondaryTables.length > 0) {
+      Promise.allSettled(secondaryTables.map(async (type) => {
+        let updated = await fetchTable(type);
+        if (updated) {
+          save();
+          if (['dashboard', 'reports', 'public'].includes(curPage)) {
+            render();
+          }
+        }
+      }));
     }
-    if (newFp !== _lastCloudFp) {
-      _lastCloudFp = newFp;
-      render(); // Only re-render if record counts or IDs actually changed
-    }
+  } finally {
+    _syncingCloud = false;
   }
 }
 
 function subscribeCloud() {
   if (!cloud) return;
-  cloud.channel('mandal-live-updates').on('postgres_changes', { event: '*', schema: 'public' }, () => loadCloud()).subscribe();
+  cloud.channel('mandal-live-updates').on('postgres_changes', { event: '*', schema: 'public' }, () => loadCloud(true)).subscribe();
 }
 
-/* Background Polling & Window Focus Listeners for Multi-Device Sync */
-setInterval(loadCloud, 30000); // Reduced from 8s → 30s to avoid hammering DB and blocking main thread
-window.addEventListener('focus', loadCloud);
+/* Background Polling & Window Focus Listeners for Multi-Device Sync (Throttled) */
+setInterval(() => loadCloud(false), 45000);
+window.addEventListener('focus', () => loadCloud(false));
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') loadCloud();
+  if (document.visibilityState === 'visible') loadCloud(false);
 });
 
 /* ── Prevent double render: save() dispatches a storage event which
@@ -766,10 +870,22 @@ let _isSaving = false;
 function save() {
   try {
     _isSaving = true;
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
+    let safePayload = JSON.stringify(getStorageSafeDb(db));
+    localStorage.setItem(LOCAL_STORAGE_KEY, safePayload);
     window.dispatchEvent(new Event('storage'));
   } catch (err) {
     console.warn('localStorage quota note:', err);
+    try {
+      let corePayload = JSON.stringify({
+        donations: db.donations || [],
+        expenses: (db.expenses || []).map(e => ({ ...e, image: '' })),
+        contacts: db.contacts || [],
+        aartis: db.aartis || [],
+        events: db.events || [],
+        settings: db.settings || seed.settings
+      });
+      localStorage.setItem(LOCAL_STORAGE_KEY, corePayload);
+    } catch(e2) {}
   } finally {
     _isSaving = false;
   }
@@ -779,8 +895,17 @@ window.addEventListener('storage', () => {
   if (_isSaving) return; // Same-tab save — skip to avoid double render
   const d = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (d) {
-    db = JSON.parse(d);
-    render();
+    try {
+      let parsed = JSON.parse(d);
+      if (parsed && typeof parsed === 'object') {
+        Object.keys(parsed).forEach(k => {
+          if (k !== 'alankar' || !db.alankar?.length) {
+            db[k] = parsed[k];
+          }
+        });
+        render();
+      }
+    } catch(e) {}
   }
 });
 
@@ -2261,23 +2386,48 @@ function events() {
   );
 }
 
+function getAvatarInitials(name) {
+  if (!name || typeof name !== 'string') return 'ॐ';
+  let parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'ॐ';
+  if (parts.length === 1) return parts[0].slice(0, 2);
+  return (parts[0][0] || '') + (parts[parts.length - 1][0] || '');
+}
+
 /* Contacts Page */
 function contacts() {
+  let list = db.contacts || [];
   return shell(
     'Committee Contacts',
-    'महत्वाच्या सदस्यांशी थेट संपर्क',
-    `<div class="toolbar"><button class="primary-btn" onclick="openForm('contact')">+ Add Contact</button></div>
-    <div class="contacts">
-      ${db.contacts.map(c => `
-        <article class="contact">
-          <div class="contact-avatar">${escapeHtml(c.name.split(' ').map(x => x[0]).slice(0, 2).join(''))}</div>
-          <div>
-            <strong>${escapeHtml(c.name)}</strong>
-            <span>${escapeHtml(c.role)}</span>
-            <a href="tel:${escapeHtml(c.phone)}">☎ ${escapeHtml(c.phone)}</a>
-          </div>
-        </article>
-      `).join('')}
+    'महत्वाच्या सदस्यांशी थेट संपर्क व व्यवस्थापन',
+    `<div class="toolbar">
+      <input class="search" placeholder="Search contact name, role or phone…" oninput="filterCards(this,'contactCards')">
+      <button class="primary-btn" onclick="openForm('contact')">+ Add Contact</button>
+    </div>
+    <div class="contacts" id="contactCards">
+      ${list.map(c => {
+        let cleanPh = getCleanWhatsAppDigits(c.phone);
+        let telPh = (c.phone || '').replace(/[^\d+]/g, '');
+        let waMsg = encodeURIComponent('॥ श्री गणेशाय नमः ॥ नमस्कार, ' + currentMandal.name + ' संदर्भात संपर्क करत आहे.');
+        let waUrl = cleanPh ? `https://api.whatsapp.com/send?phone=${cleanPh}&text=${waMsg}` : '';
+        return `
+          <article class="contact" style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:#fffdfa; border:1px solid #ebdcd0; border-radius:12px; gap:10px;">
+            <div style="display:flex; gap:11px; align-items:center; min-width:0; flex:1;">
+              <div class="contact-avatar" style="width:40px; height:40px; font-size:14px; border-radius:50%; background:#fcece2; color:#8b261e; font-weight:800; display:grid; place-items:center; flex-shrink:0;">${escapeHtml(getAvatarInitials(c.name))}</div>
+              <div style="min-width:0; overflow:hidden;">
+                <strong style="font-size:13.5px; color:#2c1b18; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">${escapeHtml(c.name || '')}</strong>
+                <span style="font-size:11.5px; color:#8b261e; font-weight:600; display:block; margin:1px 0;">${escapeHtml(c.role || '')}</span>
+                <a href="tel:${escapeHtml(telPh || c.phone || '')}" style="font-size:11px; color:#6e584f; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">☎ ${escapeHtml(c.phone || '')}</a>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+              ${c.phone ? `<a href="tel:${escapeHtml(telPh)}" title="कॉल करा (Call)" style="width:34px; height:34px; border-radius:8px; background:#fdf2f2; border:1px solid #fecaca; color:#991b1b; display:grid; place-items:center; text-decoration:none; font-size:14px;">📞</a>` : ''}
+              ${waUrl ? `<a href="${waUrl}" target="_blank" rel="noopener noreferrer" title="WhatsApp वर संदेश पाठवा" style="width:34px; height:34px; border-radius:8px; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; display:grid; place-items:center; text-decoration:none; font-size:15px;">💬</a>` : ''}
+              <button class="table-action" onclick="editItem('contact','${c.id}')" title="पर्याय (Options)" style="width:34px; height:34px;">•••</button>
+            </div>
+          </article>
+        `;
+      }).join('') || '<div class="empty" style="grid-column:1/-1;">अद्याप संपर्क जोडलेले नाहीत (No contacts added yet)</div>'}
     </div>`
   );
 }
@@ -3003,9 +3153,9 @@ function openForm(type, item = null) {
       `;
     })(),
     contact: `
-      <div class="field full"><label>Name</label><input name="name" required value="${escapeHtml(x.name || '')}"></div>
-      <div class="field"><label>Role / designation</label><input name="role" required value="${escapeHtml(x.role || '')}"></div>
-      <div class="field"><label>Phone number</label><input name="phone" required inputmode="tel" value="${formatPhoneWithCountryCode(x.phone || '')}" placeholder="+91 98765 43210" oninput="if(this.value.replace(/\D/g,'').length===10){this.value=formatPhoneWithCountryCode(this.value)}" onblur="this.value = formatPhoneWithCountryCode(this.value)"></div>
+      <div class="field full"><label>Name (नाव)</label><input name="name" required value="${escapeHtml(x.name || '')}" placeholder="उदा. सचिन कदम"></div>
+      <div class="field"><label>Role / designation (पद / जबाबदारी)</label><input name="role" required value="${escapeHtml(x.role || '')}" placeholder="उदा. अध्यक्ष / सचिव / खजिनदार / कार्यकर्ते"></div>
+      <div class="field"><label>Phone number (मोबाईल नंबर)</label><input name="phone" required inputmode="tel" value="${formatPhoneWithCountryCode(x.phone || '')}" placeholder="+91 98765 43210" oninput="if(this.value.replace(/\D/g,'').length===10){this.value=formatPhoneWithCountryCode(this.value)}" onblur="this.value = formatPhoneWithCountryCode(this.value)"></div>
     `,
     alankar: `
       <div class="field full"><label>Title / Decoration details</label><input name="title" required value="${escapeHtml(x.title || '')}"></div>
@@ -3070,6 +3220,21 @@ async function submitForm(ev, type, id) {
     }
     if (!o.description || !o.description.trim()) {
       toast('कृपया खर्च तपशील प्रविष्ट करा (Please enter description)');
+      return;
+    }
+  }
+
+  if (type === 'contact') {
+    if (!o.name || !o.name.trim()) {
+      toast('कृपया सदस्याचे नाव प्रविष्ट करा (Please enter member name)');
+      return;
+    }
+    if (!o.role || !o.role.trim()) {
+      toast('कृपया पद / जबाबदारी प्रविष्ट करा (Please enter role)');
+      return;
+    }
+    if (!o.phone || !o.phone.trim()) {
+      toast('कृपया मोबाईल नंबर प्रविष्ट करा (Please enter phone number)');
       return;
     }
   }
@@ -3173,7 +3338,28 @@ async function saveItem(type, id, o) {
   save();
   render();
 
-  let syncFailed = false;
+  // Optimistically close modal & dismiss loader immediately for maximum responsiveness!
+  hideLoader();
+  closeModal();
+
+  if (type === 'donation') {
+    toast('✅ देणगी नोंद यशस्वी! (Donation registered successfully)');
+    openReceiptModal(o.id);
+  } else if (type === 'expense') {
+    toast('✅ खर्च नोंद यशस्वी! (Expense registered successfully)');
+  } else if (type === 'aarti') {
+    toast('✅ महाआरती नोंद यशस्वी! (Aarti registered successfully)');
+  } else if (type === 'event') {
+    toast('✅ कार्यक्रम / सूचना नोंद यशस्वी! (Event registered successfully)');
+  } else if (type === 'contact') {
+    toast('✅ संपर्क नोंद यशस्वी! (Contact saved successfully)');
+  } else if (type === 'alankar') {
+    toast('✅ मुखदर्शन फोटो जतन झाला! (Photo saved successfully)');
+  } else {
+    toast('✅ यशस्वीरीत्या जतन झाले! (Saved successfully)');
+  }
+
+  // Cloud sync in background
   if (cloud) {
     let isCloudId = id && String(id).includes('-');
     let payload = toCloud(type, o);
@@ -3193,8 +3379,8 @@ async function saveItem(type, id, o) {
 
       if (error) {
         if (error.code !== 'PGRST205') {
-          syncFailed = true;
           console.warn('Supabase Error:', error);
+          toast('⚠️ स्थानिक सेव्ह झाले (Cloud sync pending)');
         }
       }
 
@@ -3206,32 +3392,7 @@ async function saveItem(type, id, o) {
         render();
       }
     } catch (err) {
-      syncFailed = true;
       console.warn('Save item cloud sync error:', err);
-    }
-  }
-
-  hideLoader();
-  closeModal();
-
-  if (syncFailed) {
-    toast('⚠️ स्थानिक सेव्ह झाले (Cloud sync error)');
-  } else {
-    if (type === 'donation') {
-      toast('✅ देणगी नोंद यशस्वी! (Donation registered successfully)');
-      openReceiptModal(o.id);
-    } else if (type === 'expense') {
-      toast('✅ खर्च नोंद यशस्वी! (Expense registered successfully)');
-    } else if (type === 'aarti') {
-      toast('✅ महाआरती नोंद यशस्वी! (Aarti registered successfully)');
-    } else if (type === 'event') {
-      toast('✅ कार्यक्रम / सूचना नोंद यशस्वी! (Event registered successfully)');
-    } else if (type === 'contact') {
-      toast('✅ संपर्क नोंद यशस्वी! (Contact saved successfully)');
-    } else if (type === 'alankar') {
-      toast('✅ मुखदर्शन फोटो जतन झाला! (Photo saved successfully)');
-    } else {
-      toast('✅ यशस्वीरीत्या जतन झाले! (Saved successfully)');
     }
   }
 
@@ -3288,9 +3449,23 @@ function manageFinancial(type, id) {
 
 function editItem(type, id) {
   let list = getItemList(type);
-  let x = list.find(i => String(i.id) === String(id));
+  let x = list ? list.find(i => String(i.id) === String(id)) : null;
+  if (!x) return;
   if (['donation', 'expense', 'document'].includes(type)) return guardEdit(type, id);
-  modal('Manage entry', `<p class="delete-text">Edit or remove this ${type} entry.</p><div class="modal-actions"><button class="outline-btn" onclick="openForm('${type}',getItem('${type}','${id}'))">Edit</button><button class="primary-btn" onclick="confirmDelete('${type}','${id}')">Delete</button></div>`);
+  let typeLabels = {
+    contact: 'समिती सदस्य (Committee Member)',
+    aarti: 'महाआरती (Aarti Slot)',
+    event: 'कार्यक्रम / सूचना (Announcement)'
+  };
+  let label = typeLabels[type] || type;
+  modal(
+    `Manage ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+    `<p class="delete-text">तुम्हाला या <b>${escapeHtml(label)}</b> नोंदीमध्ये बदल करायचा आहे की ही नोंद हटवायची आहे?</p>
+    <div class="modal-actions" style="justify-content:center; gap:10px;">
+      <button class="outline-btn" onclick="openForm('${type}',getItem('${type}','${id}'))">✏️ Edit (बदल करा)</button>
+      <button class="primary-btn" style="background:#dc2626; border-color:#dc2626;" onclick="confirmDelete('${type}','${id}')">🗑️ Delete (हटवा)</button>
+    </div>`
+  );
 }
 
 function getItemList(type) {
@@ -3302,7 +3477,14 @@ function getItem(type, id) {
 }
 
 function confirmDelete(type, id) {
-  modal('Delete entry?', `<p class="delete-text">This cannot be undone. Are you sure you want to delete this entry?</p><div class="modal-actions"><button class="outline-btn" onclick="closeModal()">Cancel</button><button class="primary-btn" onclick="deleteItem('${type}','${id}')">Yes, Delete</button></div>`);
+  modal(
+    'Delete entry? (नोंद हटवायची का?)',
+    `<p class="delete-text">ही नोंद कायमस्वरूपी काढून टाकण्यात येईल. तुम्ही सहमत आहात का? (This cannot be undone. Are you sure you want to delete?)</p>
+    <div class="modal-actions" style="justify-content:center; gap:10px;">
+      <button class="outline-btn" onclick="closeModal()">रद्द करा (Cancel)</button>
+      <button class="primary-btn" style="background:#dc2626; border-color:#dc2626;" onclick="deleteItem('${type}','${id}')">🗑️ हो, हटवा (Yes, Delete)</button>
+    </div>`
+  );
 }
 
 async function deleteItem(type, id) {
@@ -4132,7 +4314,7 @@ async function loadPublicMandalData() {
   // 4. Load table data
   try {
     if (cloud) {
-      await loadCloud();
+      await loadCloud(true);
     } else {
       // Fallback: direct REST API loader for each table
       let types = Object.keys(tableName);
@@ -4192,7 +4374,7 @@ function initApp() {
     loadPublicMandalData();
   } else {
     render();
-    loadCloud();
+    loadCloud(true);
     subscribeCloud();
   }
 }
