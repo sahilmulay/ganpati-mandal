@@ -4544,6 +4544,14 @@ async function loadPublicMandalData() {
   try {
     clearBappaLoaderTimers();
     render();
+    if (typeof gtag === 'function') {
+      try {
+        gtag('event', 'mandal_public_visit', {
+          mandal_name: currentMandal?.name || 'Mandal',
+          mandal_id: currentMandal?.id || ''
+        });
+      } catch(e) {}
+    }
   } catch(renderErr) {
     console.error('Public portal render error:', renderErr);
     if (target) {
