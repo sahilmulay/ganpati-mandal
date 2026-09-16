@@ -2060,6 +2060,15 @@ function dashboard() {
       <h2>॥ श्री गणेशाय नमः ॥</h2>
       <p>सेवा, श्रद्धा आणि एकतेने आपला उत्सव सुंदर करूया.</p>
     </section>
+    ${(!currentMandal.slug || currentMandal.slug.toLowerCase().includes('vrindavan')) ? `
+    <!-- Last Year Remaining Amount (Above Collection) -->
+    <div class="last-year-balance-banner">
+      <div class="last-year-balance-text">
+        <span class="last-year-icon">💰</span>
+        <span>मागील वर्षाची शिल्लक रक्कम (Last year remaining amount):</span>
+      </div>
+      <div class="last-year-balance-amt">₹21,400/-</div>
+    </div>` : ''}
     <section class="stats">
       ${stat('Total Collection', '↗', rupees(inc), 'income')}
       ${stat('Total Expenses', '↘', rupees(exp), 'expense')}
@@ -2095,7 +2104,7 @@ function dashboard() {
 }
 
 function stat(label, icon, value, cl) {
-  return `<div class="stat-card ${cl}"><div class="stat-head"><span>${escapeHtml(label)}</span><span class="stat-icon">${icon}</span></div><div class="money">${value}</div></div>`;
+  return `<div class="stat-card ${cl}"><div class="stat-head"><span class="stat-title"><b>${escapeHtml(label)}</b></span><span class="stat-icon">${icon}</span></div><div class="money">${value}</div></div>`;
 }
 
 function aartiSmall(a) {
