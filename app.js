@@ -734,6 +734,16 @@ function sortByNewest(list) {
   });
 }
 
+/* Helper: Sort announcements / notices so newest / latest entries ALWAYS come to top */
+function sortEventsNewestFirst(list) {
+  return [...list].sort((a, b) => {
+    let tB = b.created_at ? new Date(b.created_at).getTime() : (b.date ? new Date(b.date).getTime() : 0);
+    let tA = a.created_at ? new Date(a.created_at).getTime() : (a.date ? new Date(a.date).getTime() : 0);
+    if (tB !== tA) return tB - tA;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+}
+
 /* Helper: Sort upcoming events in chronological order (earliest date first, e.g. 14th Sept first, then 20th Sept) */
 function sortEventsChronological(list) {
   return [...list].sort((a, b) => {
@@ -1397,7 +1407,7 @@ function publicView() {
   let alankars = sortByNewest(db.alankar || []);
   let sortedDonations = sortByNewest(db.donations);
   let sortedExpenses = sortByNewest(db.expenses);
-  let upcomingEvents = sortEventsChronological(db.events).slice(0, 6);
+  let upcomingEvents = sortEventsNewestFirst(db.events).slice(0, 6);
   let contactsList = db.contacts && db.contacts.length ? db.contacts : [];
 
 
@@ -2039,7 +2049,7 @@ window.downloadMedia = downloadMedia;
 function dashboard() {
   let inc = sum(db.donations), exp = sum(db.expenses);
   let allAartis = [...db.aartis].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  let up = sortEventsChronological(db.events).slice(0, 4);
+  let up = sortEventsNewestFirst(db.events).slice(0, 4);
   let notifGranted = ('Notification' in window) && Notification.permission === 'granted';
 
   let notifBanner = !notifGranted ? `
@@ -2121,17 +2131,21 @@ function aartiSmall(a) {
   `;
 }
 
-function eventSmall(e) {
+function eventSmall(e, index = -1) {
   let d = new Date(e.date);
   let dayNum = isNaN(d.getDate()) ? '📢' : d.getDate();
   let monthStr = isNaN(d.getTime()) ? 'EVENT' : d.toLocaleString('en', { month: 'short' }).toUpperCase();
+  let isLatest = (index === 0);
   return `
     <div class="announcement">
       <div class="ann-date"><b>${dayNum}</b>${monthStr}</div>
       <div class="ann-copy">
-        <strong>${escapeHtml(e.title)}</strong>
-        <span style="font-size:11px; color:#8b261e; font-weight:600; display:block; margin-bottom:2px;">${formatEventDateTimeDisplay(e.date)}</span>
-        <p>${escapeHtml(e.description || '')}</p>
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:2px;">
+          <strong>${escapeHtml(e.title)}</strong>
+          ${isLatest ? '<span style="font-size:10px; padding:1px 6px; font-weight:800; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; border-radius:5px; letter-spacing:0.2px;">★ नवीन (LATEST)</span>' : ''}
+        </div>
+        <span style="font-size:11px; color:#8b261e; font-weight:600; display:block; margin-bottom:4px;">📅 ${formatEventDateTimeDisplay(e.date)}</span>
+        <p style="white-space:pre-line; margin:0;">${escapeHtml(e.description || '')}</p>
       </div>
     </div>
   `;
@@ -2508,7 +2522,7 @@ function events() {
       <button class="primary-btn" onclick="openForm('event')">+ Add Announcement</button>
     </div>
     <div class="contacts" id="eventCards">
-      ${sortEventsChronological(db.events).map(e => `
+      ${sortEventsNewestFirst(db.events).map(e => `
         <article class="contact">
           <div class="ann-date"><b>${new Date(e.date).getDate() || '📢'}</b>${new Date(e.date).toLocaleString('en', { month: 'short' }).toUpperCase()}</div>
           <div style="flex:1">
@@ -3469,6 +3483,7 @@ async function saveItem(type, id, o) {
   } else {
     o.id = type[0] + (Date.now().toString().slice(-5));
     o.image = hasValidImage(o.image) ? o.image : '';
+    o.created_at = o.created_at || new Date().toISOString();
     delete o.clearImage;
     list.unshift(o);
   }
