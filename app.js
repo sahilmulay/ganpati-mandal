@@ -786,7 +786,14 @@ function getStorageSafeDb(source) {
     }),
     documents: (source.documents || []).map(d => {
       let c = { ...d };
-      if (c.image && c.image.startsWith('data:') && c.image.length > 80000) c.image = '';
+      if (c.image && c.image.startsWith('data:') && c.image.length > 80000) {
+        c.hasFile = true;
+        c.fileType = isPdfData(c.image) ? 'pdf' : 'image';
+        c.image = '';
+      } else if (c.image) {
+        c.hasFile = true;
+        c.fileType = isPdfData(c.image) ? 'pdf' : 'image';
+      }
       return c;
     })
   };
@@ -830,13 +837,13 @@ async function loadCloud(force = false) {
     priorityTables = ['document'];
     secondaryTables = [];
   } else if (curPage === 'public') {
-    // Financial stats, aartis, events, contacts first (<150ms); alankar gallery photos load in background
-    priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact'];
+    // Financial stats, aartis, events, contacts, documents first; alankar gallery photos load in background
+    priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact', 'document'];
     secondaryTables = ['alankar'];
   } else {
     // Dashboard & Reports
     priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact'];
-    secondaryTables = [];
+    secondaryTables = ['document'];
   }
 
   async function fetchTable(type) {
@@ -1194,6 +1201,41 @@ function openDocumentModal(docId) {
 
         <div class="modal-actions" style="justify-content:center; gap:10px;">
           <button class="primary-btn" onclick="openDocForm(getItem('document','${doc.id}'))">📎 Upload Permission Photo / PDF</button>
+          <button class="outline-btn" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `);
+  }
+}
+
+async function openDocumentPublic(docId) {
+  let doc = (db.documents || []).find(x => String(x.id) === String(docId));
+  if (!doc) return toast('कागदपत्र आढळले नाही', 'warning');
+
+  let img = doc.image;
+  if (!hasValidImage(img) && cloud && doc.id) {
+    try {
+      toast('कागदपत्र लोड होत आहे...', 'info');
+      let { data, error } = await cloud.from('documents').select('image').eq('id', doc.id).single();
+      if (data && hasValidImage(data.image)) {
+        img = data.image;
+        doc.image = data.image;
+      }
+    } catch(e) {
+      console.warn('Document image fetch note:', e);
+    }
+  }
+
+  if (hasValidImage(img)) {
+    openBill(img);
+  } else {
+    modal('अधिकृत परवानगी (Official Permission)', `
+      <div class="bill-modal-content no-bill-view" style="text-align:center;">
+        <div style="font-size:48px; margin-bottom:8px;">📁</div>
+        <h4 style="color:#8b261e; margin:0 0 6px 0;">${escapeHtml(doc.title)}</h4>
+        <p style="color:#b45309; font-weight:600; font-size:13px; margin:0 0 12px 0;">⏳ स्थिती: ${escapeHtml(doc.status || 'Pending')}</p>
+        <p style="color:#6e584f; font-size:13px; margin:0 0 16px 0;">या परवानगीची मूळ प्रत/फोटो अद्याप अपलोड केलेली नाही.</p>
+        <div class="modal-actions" style="justify-content:center;">
           <button class="outline-btn" onclick="closeModal()">Close</button>
         </div>
       </div>
@@ -1620,8 +1662,8 @@ function publicView() {
         ${(db.documents && db.documents.length) ? `
           <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:10px;">
             ${db.documents.map(doc => {
-              let hasPhoto = hasValidImage(doc.image);
-              let isPdf = isPdfData(doc.image);
+              let hasPhoto = hasValidImage(doc.image) || doc.hasFile;
+              let isPdf = isPdfData(doc.image) || doc.fileType === 'pdf';
               let statusColor = doc.status === 'Approved' ? '#15803d' : '#b45309';
               let statusBg   = doc.status === 'Approved' ? '#dcfce7' : '#fef3c7';
               return `
@@ -1639,7 +1681,7 @@ function publicView() {
                 </div>
                 ${hasPhoto ? `
                   <div style="margin-top:10px;">
-                    <button class="text-link" style="font-weight:700; color:#8b261e; font-size:12px;" onclick="openBill('${escapeHtml(doc.image)}')">
+                    <button class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="openDocumentPublic('${escapeHtml(doc.id)}')">
                       ${isPdf ? '📄 View PDF Document' : '🖼️ View Permission Photo'}
                     </button>
                   </div>
