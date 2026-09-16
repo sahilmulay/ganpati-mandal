@@ -1548,9 +1548,6 @@ function publicView() {
         <div class="stat-card balance">
           <div class="stat-head"><span class="stat-title"><b>शिल्लक (Net Balance)</b></span><span class="stat-icon">◈</span></div>
           <div class="money">${rupees(bal)}</div>
-          <div style="font-size:10.5px; color:#78350f; margin-top:3px; font-weight:600;">
-            + मागील शिल्लक = <b>${rupees(bal + 21400)}</b>
-          </div>
         </div>
       </section>
 
