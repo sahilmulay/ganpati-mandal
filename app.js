@@ -4345,7 +4345,7 @@ function setupBappaLoader(symbolElId, factElId) {
         currentFactEl.textContent = BAPPA_FACTS[_bappaFactIdx];
         currentFactEl.classList.remove('fading');
       }, 300);
-    }, 3600);
+    }, 2400);
   }
 }
 
@@ -4519,7 +4519,7 @@ async function loadPublicMandalData() {
 
   // 4. Load table data with guaranteed minimum display time for the Bappa loader & facts
   try {
-    let minLoaderPromise = new Promise(resolve => setTimeout(resolve, 2500));
+    let minLoaderPromise = new Promise(resolve => setTimeout(resolve, 5000));
     if (cloud) {
       await Promise.all([loadCloud(true), minLoaderPromise]);
     } else {
