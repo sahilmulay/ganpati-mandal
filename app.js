@@ -627,56 +627,100 @@ function fromCloud(type, row) {
 }
 
 function toCloud(type, row) {
-  let copy = { ...row };
-  delete copy.id;
-  delete copy.image;
   let img = hasValidImage(row.image) ? row.image.trim() : (hasValidImage(row.image_url) ? row.image_url.trim() : '');
+  let mandalId = currentMandal.id;
+
   if (type === 'expense') {
-    let pBy = (copy.paidBy || copy.paid_by || 'Mandal').trim();
-    let m = (copy.mode || 'Cash').trim();
+    let pBy = (row.paidBy || row.paid_by || 'Mandal').trim();
+    let m = (row.mode || 'Cash').trim();
     if (m && !pBy.includes('(' + m + ')')) {
       pBy = pBy.replace(/\s*\((Cash|UPI)\)/gi, '').trim();
       pBy = `${pBy} (${m})`;
     }
-    copy.paid_by = pBy;
-    copy.image_url = img;
-    delete copy.image;
-    delete copy.paidBy;
-    delete copy.mode;
+    return {
+      category: row.category || 'Other',
+      description: (row.description || '').trim(),
+      amount: Number(row.amount) || 0,
+      paid_by: pBy,
+      date: row.date || today,
+      image_url: img,
+      mandal_id: mandalId
+    };
   }
+
+  if (type === 'donation') {
+    let payload = {
+      name: (row.name || '').trim(),
+      amount: Number(row.amount) || 0,
+      date: row.date || today,
+      mode: row.mode || 'Cash',
+      note: (row.note || '').trim(),
+      mandal_id: mandalId
+    };
+    if (row.phone) payload.phone = String(row.phone).trim();
+    return payload;
+  }
+
+  if (type === 'contact') {
+    return {
+      name: (row.name || '').trim(),
+      role: (row.role || '').trim(),
+      phone: (row.phone || '').trim(),
+      mandal_id: mandalId
+    };
+  }
+
+  if (type === 'aarti') {
+    return {
+      date: row.date || today,
+      type: row.type || 'Morning',
+      person: (row.person || '').trim(),
+      time: row.time || '09:00',
+      note: (row.note || '').trim(),
+      mandal_id: mandalId
+    };
+  }
+
   if (type === 'event') {
-    copy.image_url = img;
-    delete copy.image;
-    if (row.date) {
-      let d = new Date(row.date);
-      if (!isNaN(d.getTime())) copy.date = d.toISOString();
-    }
+    let d = row.date ? new Date(row.date) : new Date();
+    return {
+      title: (row.title || '').trim(),
+      date: !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
+      description: (row.description || '').trim(),
+      image_url: img,
+      mandal_id: mandalId
+    };
   }
-  if (type === 'document') {
-    copy.outward_no = row.outwardNo || row.outward_no || '';
-    copy.issued_by = row.issuedBy || row.issued_by || '';
-    copy.valid_from = row.validFrom || row.valid_from || '';
-    copy.valid_until = row.validUntil || row.valid_until || '';
-    copy.image = img;
-    delete copy.image_url;
-    delete copy.outwardNo;
-    delete copy.issuedBy;
-    delete copy.validFrom;
-    delete copy.validUntil;
-  }
+
   if (type === 'alankar') {
-    // alankar table columns: id, mandal_id, date, type, note, image, created_at
-    // — NO title column, NO image_url column
-    // id MUST be preserved — alankar uses explicit string IDs, not auto-gen UUIDs
-    copy.id = row.id;
-    copy.image = img;
-    copy.type = row.type || (isVideoData(img) ? 'video' : 'photo');
-    delete copy.image_url;
-    delete copy.title; // no 'title' column in alankar table
+    return {
+      id: row.id,
+      date: row.date || today,
+      type: row.type || (isVideoData(img) ? 'video' : 'photo'),
+      note: (row.note || '').trim(),
+      image: img,
+      mandal_id: mandalId
+    };
   }
-  delete copy.created_at;
-  copy.mandal_id = currentMandal.id;
-  return copy;
+
+  if (type === 'document') {
+    return {
+      id: row.id,
+      title: (row.title || '').trim(),
+      category: row.category || 'Other',
+      icon: row.icon || '📁',
+      outward_no: row.outwardNo || row.outward_no || '',
+      issued_by: (row.issuedBy || row.issued_by || '').trim(),
+      valid_from: row.validFrom || row.valid_from || '',
+      valid_until: row.validUntil || row.valid_until || '',
+      status: row.status || 'Pending',
+      note: (row.note || '').trim(),
+      image: img,
+      mandal_id: mandalId
+    };
+  }
+
+  return { mandal_id: mandalId };
 }
 
 /* Helper: Sort items so newest entries ALWAYS come to top (Date DESC, then created_at / ID DESC) */
@@ -846,8 +890,41 @@ async function loadCloud(force = false) {
         }
       }));
     }
+
+    // Auto-sync any local items whose cloud sync was delayed or failed
+    syncPendingLocalItems();
   } finally {
     _syncingCloud = false;
+  }
+}
+
+async function syncPendingLocalItems() {
+  if (!cloud) return;
+  let typesToSync = ['expense', 'donation', 'contact', 'aarti', 'event'];
+  let anySynced = false;
+  for (let type of typesToSync) {
+    let list = db[listName[type]] || [];
+    let pending = list.filter(x => x.id && !String(x.id).includes('-'));
+    for (let item of pending) {
+      try {
+        let payload = toCloud(type, item);
+        let { data, error } = await cloud.from(tableName[type]).insert(payload).select().single();
+        if (data) {
+          let updated = fromCloud(type, data);
+          let idx = list.findIndex(x => String(x.id) === String(item.id));
+          if (idx >= 0) {
+            list[idx] = updated;
+            anySynced = true;
+          }
+        }
+      } catch(e) {
+        console.warn('Background sync retry note:', e);
+      }
+    }
+  }
+  if (anySynced) {
+    save();
+    render();
   }
 }
 
@@ -1449,6 +1526,15 @@ function publicView() {
         <span class="public-header-badge">🌸 भक्त व ग्रामस्थ पारदर्शक माहिती दालन (Public Portal) 🌸</span>
       </div>
 
+      <!-- Last Year Remaining Amount (Above Collection) -->
+      <div class="last-year-balance-banner">
+        <div class="last-year-balance-text">
+          <span class="last-year-icon">💰</span>
+          <span>मागील वर्षाची शिल्लक रक्कम (Last year remaining amount):</span>
+        </div>
+        <div class="last-year-balance-amt">₹21,400/-</div>
+      </div>
+
       <!-- Section 1: Financial Summary Cards (On Top) -->
       <section class="stats" style="margin-bottom:20px;">
         <div class="stat-card income">
@@ -1462,6 +1548,9 @@ function publicView() {
         <div class="stat-card balance">
           <div class="stat-head"><span class="stat-title"><b>शिल्लक (Net Balance)</b></span><span class="stat-icon">◈</span></div>
           <div class="money">${rupees(bal)}</div>
+          <div style="font-size:10.5px; color:#78350f; margin-top:3px; font-weight:600;">
+            + मागील शिल्लक = <b>${rupees(bal + 21400)}</b>
+          </div>
         </div>
       </section>
 
