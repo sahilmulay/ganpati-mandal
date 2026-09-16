@@ -814,6 +814,7 @@ function getStorageSafeDb(source) {
 
 let _lastCloudSyncTime = 0;
 let _syncingCloud = false;
+let _alankarLoading = false;
 
 async function loadCloud(force = false) {
   if (!cloud || _syncingCloud) return;
@@ -900,14 +901,23 @@ async function loadCloud(force = false) {
 
     // Phase 2: Fetch secondary tables quietly in background without blocking UI
     if (secondaryTables.length > 0) {
+      if (secondaryTables.includes('alankar')) {
+        _alankarLoading = true;
+      }
       Promise.allSettled(secondaryTables.map(async (type) => {
         let updated = await fetchTable(type);
+        if (type === 'alankar') {
+          _alankarLoading = false;
+        }
         if (updated) {
           save();
           if (['dashboard', 'reports', 'public'].includes(curPage)) {
             render();
           }
+        } else if (curPage === 'public' && type === 'alankar') {
+          render();
         }
+        return updated;
       }));
     }
 
@@ -1418,7 +1428,25 @@ function publicView() {
   let galleryItems = alankars.filter(a => hasValidImage(a.image));
   let galleryHtml = '';
 
-  if (!galleryItems.length) {
+  if (_alankarLoading && !galleryItems.length) {
+    galleryHtml = `
+      <div class="gallery-in-place-loader">
+        <div class="gallery-loader-top">
+          <span class="gallery-spin-icon">🌺</span>
+          <div class="gallery-loader-text">
+            <strong>श्री बाप्पा मुखदर्शन फोटो व व्हिडिओ लोड होत आहेत...</strong>
+            <span>कृपया क्षणभर थांबा (Loading Bappa Darshan Gallery...)</span>
+          </div>
+        </div>
+        <div class="gallery-shimmer-grid">
+          <div class="gallery-shimmer-box"><div class="shimmer-wave"></div></div>
+          <div class="gallery-shimmer-box"><div class="shimmer-wave"></div></div>
+          <div class="gallery-shimmer-box"><div class="shimmer-wave"></div></div>
+          <div class="gallery-shimmer-box"><div class="shimmer-wave"></div></div>
+        </div>
+      </div>
+    `;
+  } else if (!galleryItems.length) {
     galleryHtml = '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो किंवा व्हिडिओ अपलोड केलेले नाहीत.</div>';
   } else {
     // Group by date (newest day first)
@@ -2319,10 +2347,32 @@ function expenses() {
           <button class="primary-btn" onclick="openForm('expense')">+ Add Expense</button>
         </div>
         <div class="desktop-expenses">
-          ${tableWrap(`<thead><tr><th>Date</th><th>Expense details</th><th>Paid by</th><th>Amount</th><th>Bill Photo</th><th></th></tr></thead><tbody id="expenseRows">${rows}</tbody>`)}
+          ${rows ? tableWrap(`<thead><tr><th>Date</th><th>Expense details</th><th>Paid by</th><th>Amount</th><th>Bill Photo</th><th></th></tr></thead><tbody id="expenseRows">${rows}</tbody>`) : (_syncingCloud ? `
+            <div style="text-align:center; padding:36px 16px;">
+              <div style="font-size:36px; animation:bappaPulse 1.4s infinite ease-in-out;">💸</div>
+              <strong style="color:#7d1c12; font-size:14px; display:block; margin:8px 0 4px 0;">खर्च तपशील लोड होत आहेत...</strong>
+              <span style="color:#6e584f; font-size:12px;">(Loading expenses ledger...)</span>
+              <div style="max-width:320px; margin:16px auto 0 auto;">
+                <div class="shimmer-line" style="height:22px; margin-bottom:8px; border-radius:6px;"></div>
+                <div class="shimmer-line" style="height:22px; margin-bottom:8px; border-radius:6px;"></div>
+                <div class="shimmer-line" style="height:22px; border-radius:6px;"></div>
+              </div>
+            </div>
+          ` : '<div class="empty">No expenses recorded yet</div>')}
         </div>
         <div class="expense-mobile-list">
-          ${cards || '<div class="empty">No expenses recorded yet</div>'}
+          ${cards || (_syncingCloud ? `
+            <div style="text-align:center; padding:36px 16px;">
+              <div style="font-size:36px; animation:bappaPulse 1.4s infinite ease-in-out;">💸</div>
+              <strong style="color:#7d1c12; font-size:14px; display:block; margin:8px 0 4px 0;">खर्च तपशील लोड होत आहेत...</strong>
+              <span style="color:#6e584f; font-size:12px;">(Loading expenses ledger...)</span>
+              <div style="max-width:320px; margin:16px auto 0 auto;">
+                <div class="shimmer-line" style="height:22px; margin-bottom:8px; border-radius:6px;"></div>
+                <div class="shimmer-line" style="height:22px; margin-bottom:8px; border-radius:6px;"></div>
+                <div class="shimmer-line" style="height:22px; border-radius:6px;"></div>
+              </div>
+            </div>
+          ` : '<div class="empty">No expenses recorded yet</div>')}
         </div>
         <div class="summary-row">
           <span>Total Expenses</span>
@@ -2333,7 +2383,7 @@ function expenses() {
         <div class="card-title">
           <h3>Category-wise Expenses</h3>
         </div>
-        ${groups.length ? expensePie(groups) : '<div class="empty">No expenses recorded yet</div>'}
+        ${groups.length ? expensePie(groups) : (_syncingCloud ? '<div style="text-align:center; padding:24px; color:#8b261e; font-size:13px; font-weight:600;">📊 वर्गवारी माहिती लोड होत आहे...</div>' : '<div class="empty">No expenses recorded yet</div>')}
       </div>
     </div>`
   );
@@ -4465,15 +4515,17 @@ async function loadPublicMandalData() {
 
   // 3. Reset local memory to clean state for this mandal
   db = { donations: [], expenses: [], aartis: [], events: [], contacts: [], alankar: [], documents: [], settings: seed.settings };
+  _alankarLoading = true;
 
-  // 4. Load table data
+  // 4. Load table data with guaranteed minimum display time for the Bappa loader & facts
   try {
+    let minLoaderPromise = new Promise(resolve => setTimeout(resolve, 2500));
     if (cloud) {
-      await loadCloud(true);
+      await Promise.all([loadCloud(true), minLoaderPromise]);
     } else {
       // Fallback: direct REST API loader for each table
       let types = Object.keys(tableName);
-      await Promise.allSettled(types.map(async (type) => {
+      let restLoader = Promise.allSettled(types.map(async (type) => {
         let r = await fetch(`${CLOUD_CONFIG.url}/rest/v1/${tableName[type]}?select=*&mandal_id=eq.${encodeURIComponent(mandalData.id)}`, { headers: restHeaders });
         if (r.ok) {
           let rows = await r.json();
@@ -4482,6 +4534,7 @@ async function loadPublicMandalData() {
           }
         }
       }));
+      await Promise.all([restLoader, minLoaderPromise]);
     }
   } catch(dataErr) {
     console.warn('Data load note (continuing to render):', dataErr);
