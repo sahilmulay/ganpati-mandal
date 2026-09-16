@@ -734,11 +734,14 @@ function sortByNewest(list) {
   });
 }
 
-/* Helper: Sort announcements / notices so newest / latest entries ALWAYS come to top */
+/* Helper: Sort announcements / notices so newest / latest entries ALWAYS come to top (Date DESC, then created_at DESC) */
 function sortEventsNewestFirst(list) {
   return [...list].sort((a, b) => {
-    let tB = b.created_at ? new Date(b.created_at).getTime() : (b.date ? new Date(b.date).getTime() : 0);
-    let tA = a.created_at ? new Date(a.created_at).getTime() : (a.date ? new Date(a.date).getTime() : 0);
+    let dB = b.date ? new Date(b.date).getTime() : 0;
+    let dA = a.date ? new Date(a.date).getTime() : 0;
+    if (dB !== dA) return dB - dA;
+    let tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    let tA = a.created_at ? new Date(a.created_at).getTime() : 0;
     if (tB !== tA) return tB - tA;
     return String(b.id || '').localeCompare(String(a.id || ''));
   });
