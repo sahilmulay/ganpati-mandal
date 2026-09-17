@@ -448,6 +448,23 @@ let currentMsgDate = today;
 const tableName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 const listName = { donation: 'donations', expense: 'expenses', aarti: 'aartis', event: 'events', contact: 'contacts', alankar: 'alankar', document: 'documents' };
 
+/* Explicit column projection — never fetch multi-megabyte base64 strings in list queries! */
+const tableColumns = {
+  donation: 'id,name,amount,date,mode,note,phone,mandal_id,created_at',
+  expense:  'id,category,description,amount,paid_by,date,mandal_id,created_at', // Omits heavy Base64 image_url
+  aarti:    'id,date,type,person,time,note,mandal_id,created_at',
+  event:    'id,title,date,description,mandal_id,created_at',                  // Omits image_url on list
+  contact:  'id,name,role,phone,mandal_id,created_at',
+  document: 'id,mandal_id,title,category,icon,outward_no,issued_by,valid_from,valid_until,status,note,created_at', // Omits heavy Base64 image
+  alankar:  'id,mandal_id,date,type,note,created_at'                            // Metadata only!
+};
+
+/* Performance Telemetry */
+function logPerfMetric(title, durationMs, rowCount, bytesTransferred) {
+  let kb = bytesTransferred ? (bytesTransferred / 1024).toFixed(1) + ' KB' : 'N/A';
+  console.log(`%c⚡ [PERF] ${title} | ⏱️ ${durationMs}ms | 📊 ${rowCount} records | 📦 ~${kb}`, 'color: #15803d; font-weight: bold;');
+}
+
 const preloadedReceiptImg = new Image();
 preloadedReceiptImg.src = 'assets/receipt_template.png';
 
@@ -595,18 +612,23 @@ function fromCloud(type, row) {
     let mode = row.mode || 'Cash';
     if (pBy.includes('(UPI)')) mode = 'UPI';
     else if (pBy.includes('(Cash)')) mode = 'Cash';
-    return { ...row, paidBy: pBy, mode: mode, image: img, image_url: img };
+    let hasBillFlag = ('hasBill' in row) ? !!row.hasBill : (hasValidImage(img) || (typeof _expenseBillIds !== 'undefined' && _expenseBillIds.has(String(row.id))));
+    return { ...row, paidBy: pBy, mode: mode, image: img, image_url: img, hasBill: hasBillFlag };
   }
   if (type === 'event') return { ...row, date: formatDateTimeLocal(row.date), image: img, image_url: img };
-  if (type === 'document') return {
-    ...row,
-    outwardNo: row.outward_no || row.outwardNo || '',
-    issuedBy: row.issued_by || row.issuedBy || '',
-    validFrom: row.valid_from || row.validFrom || '',
-    validUntil: row.valid_until || row.validUntil || '',
-    image: img,
-    image_url: img
-  };
+  if (type === 'document') {
+    let hasDocFile = ('hasFile' in row) ? !!row.hasFile : (hasValidImage(img) || (typeof _documentFileIds !== 'undefined' && _documentFileIds.has(String(row.id))));
+    return {
+      ...row,
+      outwardNo: row.outward_no || row.outwardNo || '',
+      issuedBy: row.issued_by || row.issuedBy || '',
+      validFrom: row.valid_from || row.validFrom || '',
+      validUntil: row.valid_until || row.validUntil || '',
+      image: img,
+      image_url: img,
+      hasFile: hasDocFile
+    };
+  }
   if (type === 'alankar') {
     // alankar table has no title column — title was stored in note as "title — note"
     // Reconstruct title from note for display purposes
@@ -851,9 +873,10 @@ async function loadCloud(force = false) {
     priorityTables = ['document'];
     secondaryTables = [];
   } else if (curPage === 'public') {
-    // Financial stats, aartis, events, contacts, documents first; alankar gallery photos load in background
-    priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact', 'document'];
-    secondaryTables = ['alankar'];
+    // Priority: financial stats, aartis, events, contacts only!
+    // Documents & Alankar gallery photos are strictly lazy-loaded via IntersectionObserver!
+    priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact'];
+    secondaryTables = [];
   } else {
     // Dashboard & Reports
     priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact'];
@@ -861,14 +884,50 @@ async function loadCloud(force = false) {
   }
 
   async function fetchTable(type) {
+    let t0 = Date.now();
     try {
-      let { data, error } = await cloud.from(tableName[type]).select('*').eq('mandal_id', currentMandal.id);
+      let cols = tableColumns[type] || '*';
+      let { data, error } = await cloud.from(tableName[type]).select(cols).eq('mandal_id', currentMandal.id);
       if (error) {
         if (error.code === 'PGRST205') return false;
         console.warn(`Supabase ${type} fetch error:`, error.message);
         return false;
       }
       if (Array.isArray(data)) {
+        let dur = Date.now() - t0;
+        let bytes = JSON.stringify(data).length;
+        logPerfMetric(`Cloud Fetch: ${type}`, dur, data.length, bytes);
+
+        // If expense table, check which expenses have bills attached (ultra fast ~100ms)
+        if (type === 'expense') {
+          try {
+            let { data: billRows } = await cloud.from('expenses').select('id').not('image_url', 'is', null).neq('image_url', '').eq('mandal_id', currentMandal.id);
+            if (Array.isArray(billRows)) {
+              let billIdSet = new Set(billRows.map(b => String(b.id)));
+              data.forEach(row => {
+                row.hasBill = billIdSet.has(String(row.id));
+              });
+            }
+          } catch(bErr) {
+            console.warn('Bill check note:', bErr);
+          }
+        }
+
+        // If document table, check which documents have files attached
+        if (type === 'document') {
+          try {
+            let { data: fileRows } = await cloud.from('documents').select('id').not('image', 'is', null).neq('image', '').eq('mandal_id', currentMandal.id);
+            if (Array.isArray(fileRows)) {
+              let fileDocSet = new Set(fileRows.map(f => String(f.id)));
+              data.forEach(row => {
+                row.hasFile = fileDocSet.has(String(row.id));
+              });
+            }
+          } catch(fErr) {
+            console.warn('Document file check note:', fErr);
+          }
+        }
+
         let cloudRows = data.map(row => fromCloud(type, row));
         if (cloudRows.length > 0) {
           db[listName[type]] = cloudRows;
@@ -1092,6 +1151,7 @@ function render() {
     if (target) {
       target.innerHTML = publicView();
       updatePublicVisitorBadge(currentMandal.slug);
+      setupPublicIntersectionObservers();
     }
     return;
   }
@@ -1413,23 +1473,24 @@ async function submitDocForm(ev, id) {
   render();
 }
 
-/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD */
-function publicView() {
-  // On public.html the mandal name comes from the URL param (loaded by loadPublicMandalData)
-  let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
+/* ════════════════════════════════════════════════════════════════════════════════
+   LAZY LOADING & PERFORMANCE OPTIMIZATIONS (GALLERY, DOCUMENTS, BILLS)
+   ════════════════════════════════════════════════════════════════════════════════ */
+
+let _galleryLoaded = false;
+let _galleryLoading = false;
+let _allAlankarMeta = [];
+let _alankarPageSize = 4;
+let _alankarLoadedCount = 0;
+let _documentsLoaded = false;
+let _documentsLoading = false;
+
+function renderPublicGalleryHtml() {
   let alankars = sortByNewest(db.alankar || []);
-  let sortedDonations = sortByNewest(db.donations);
-  let sortedExpenses = sortByNewest(db.expenses);
-  let upcomingEvents = sortEventsNewestFirst(db.events).slice(0, 6);
-  let contactsList = db.contacts && db.contacts.length ? db.contacts : [];
-
-
-  // ── Day-wise Media Gallery (Photos & Videos) ─────────────────────
   let galleryItems = alankars.filter(a => hasValidImage(a.image));
-  let galleryHtml = '';
 
-  if (_alankarLoading && !galleryItems.length) {
-    galleryHtml = `
+  if ((_alankarLoading || _galleryLoading) && !galleryItems.length) {
+    return `
       <div class="gallery-in-place-loader">
         <div class="gallery-loader-top">
           <span class="gallery-spin-icon">🌺</span>
@@ -1446,102 +1507,179 @@ function publicView() {
         </div>
       </div>
     `;
-  } else if (!galleryItems.length) {
-    galleryHtml = '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो किंवा व्हिडिओ अपलोड केलेले नाहीत.</div>';
-  } else {
-    // Group by date (newest day first)
-    let dayMap = new Map();
-    galleryItems.forEach(item => {
-      let d = item.date || 'अन्य';
-      if (!dayMap.has(d)) dayMap.set(d, []);
-      dayMap.get(d).push(item);
-    });
+  }
 
-    let dayEntries = Array.from(dayMap.entries());
-    let totalDays = dayEntries.length;
-    let hasMoreDays = totalDays > 2;
+  if (!galleryItems.length) {
+    return '<div class="empty"><div class="empty-icon">🌺</div>अद्याप दैनंदिन मुखदर्शन फोटो किंवा व्हिडिओ अपलोड केलेले नाहीत.</div>';
+  }
 
-    let dayCardsHtml = dayEntries.map(([dateKey, items], dayIndex) => {
-      let isExtra = dayIndex >= 2;
-      let photoCount = items.filter(x => !(x.type === 'video' || isVideoData(x.image))).length;
-      let videoCount = items.filter(x => x.type === 'video' || isVideoData(x.image)).length;
-      let countBadge = [];
-      if (photoCount > 0) countBadge.push(`${photoCount} फोटो`);
-      if (videoCount > 0) countBadge.push(`${videoCount} व्हिडिओ`);
-      let countText = countBadge.join(', ') || `${items.length} मीडिया`;
+  // Group by date (newest day first)
+  let dayMap = new Map();
+  galleryItems.forEach(item => {
+    let d = item.date || 'अन्य';
+    if (!dayMap.has(d)) dayMap.set(d, []);
+    dayMap.get(d).push(item);
+  });
 
-      let count = Math.min(items.length, 4);
-      let visibleItems = items.slice(0, 4);
-      let remainingCount = items.length - 4;
+  let dayEntries = Array.from(dayMap.entries());
+  let totalDays = dayEntries.length;
+  let hasMoreDays = totalDays > 2;
 
-      let tilesHtml = visibleItems.map((item, i) => {
-        let globalIdx = galleryItems.indexOf(item);
-        let isVid = item.type === 'video' || isVideoData(item.image);
-        let isLastBlock = (i === 3 && remainingCount > 0);
+  let dayCardsHtml = dayEntries.map(([dateKey, items], dayIndex) => {
+    let isExtra = dayIndex >= 2;
+    let photoCount = items.filter(x => !(x.type === 'video' || isVideoData(x.image))).length;
+    let videoCount = items.filter(x => x.type === 'video' || isVideoData(x.image)).length;
+    let countBadge = [];
+    if (photoCount > 0) countBadge.push(`${photoCount} फोटो`);
+    if (videoCount > 0) countBadge.push(`${videoCount} व्हिडिओ`);
+    let countText = countBadge.join(', ') || `${items.length} मीडिया`;
 
-        return `
-          <div class="wa-collage-item" onclick="openGallery(${globalIdx})">
-            ${isVid ? `
-              <video src="${escapeHtml(item.image)}#t=0.5" preload="metadata" muted playsinline></video>
-              <div class="wa-play-btn"><div class="wa-play-icon">▶</div></div>
-              <span class="wa-badge-hd">HD</span>
-            ` : `
-              <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy">
-            `}
-            ${isLastBlock ? `<div class="wa-collage-overlay">+${remainingCount}</div>` : ''}
-          </div>
-        `;
-      }).join('');
+    let count = Math.min(items.length, 4);
+    let visibleItems = items.slice(0, 4);
+    let remainingCount = items.length - 4;
 
-      let firstItem = items[0];
-      let caption = firstItem.title || dateLabelInMarathi(dateKey);
-      let firstGlobalIdx = galleryItems.indexOf(firstItem);
-      let isVidFirst = firstItem.type === 'video' || isVideoData(firstItem.image);
-      let ext = isVidFirst ? 'mp4' : 'jpg';
-      let safeTitle = (firstItem.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
-      let filename = `bappa_${safeTitle}_${dateKey || today}.${ext}`;
+    let tilesHtml = visibleItems.map((item, i) => {
+      let globalIdx = galleryItems.indexOf(item);
+      let isVid = item.type === 'video' || isVideoData(item.image);
+      let isLastBlock = (i === 3 && remainingCount > 0);
 
       return `
-        <div class="alankar-day-group ${isExtra ? 'extra-gallery-day' : ''}" style="${isExtra ? 'display:none;' : ''}">
-          <div class="alankar-day-header">
-            <div class="alankar-day-title">
-              <span>📅</span>
-              <span>${escapeHtml(getDayGroupTitle(dateKey))}</span>
-            </div>
-            <span class="alankar-day-count">${countText}</span>
-          </div>
-          <div class="wa-collage-card">
-            <div class="wa-collage-grid count-${count}">
-              ${tilesHtml}
-            </div>
-            <div class="wa-collage-footer">
-              <div class="wa-collage-caption" title="${escapeHtml(caption)}">
-                ${escapeHtml(caption)}
-              </div>
-              <div class="wa-collage-actions">
-                <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(firstItem.image)}', '${escapeHtml(filename)}')" title="Download">
-                  ⬇️ Download
-                </button>
-                <button class="wa-view-all-btn" onclick="openGallery(${firstGlobalIdx})" title="View all photos">
-                  👁️ View all (${items.length})
-                </button>
-              </div>
-            </div>
-          </div>
+        <div class="wa-collage-item" onclick="openGallery(${globalIdx})">
+          ${isVid ? `
+            <video src="${escapeHtml(item.image)}#t=0.5" preload="metadata" muted playsinline></video>
+            <div class="wa-play-btn"><div class="wa-play-icon">▶</div></div>
+            <span class="wa-badge-hd">HD</span>
+          ` : `
+            <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy">
+          `}
+          ${isLastBlock ? `<div class="wa-collage-overlay">+${remainingCount}</div>` : ''}
         </div>
       `;
     }).join('');
 
-    let toggleBtnHtml = hasMoreDays ? `
-      <div style="text-align:center; margin-top:14px; padding-top:12px; border-top:1px dashed #e8d5c4;">
-        <button id="publicGalleryToggleBtn" class="public-gallery-toggle-btn" onclick="togglePublicGalleryDays()">
-          ▼ सर्व ${totalDays} दिवसांचे फोटो व व्हिडिओ पहा (View all ${totalDays} days)
-        </button>
-      </div>
-    ` : '';
+    let firstItem = items[0];
+    let caption = firstItem.title || dateLabelInMarathi(dateKey);
+    let firstGlobalIdx = galleryItems.indexOf(firstItem);
+    let isVidFirst = firstItem.type === 'video' || isVideoData(firstItem.image);
+    let ext = isVidFirst ? 'mp4' : 'jpg';
+    let safeTitle = (firstItem.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
+    let filename = `bappa_${safeTitle}_${dateKey || today}.${ext}`;
 
-    galleryHtml = dayCardsHtml + toggleBtnHtml;
+    return `
+      <div class="alankar-day-group ${isExtra ? 'extra-gallery-day' : ''}" style="${isExtra ? 'display:none;' : ''}">
+        <div class="alankar-day-header">
+          <div class="alankar-day-title">
+            <span>📅</span>
+            <span>${escapeHtml(getDayGroupTitle(dateKey))}</span>
+          </div>
+          <span class="alankar-day-count">${countText}</span>
+        </div>
+        <div class="wa-collage-card">
+          <div class="wa-collage-grid count-${count}">
+            ${tilesHtml}
+          </div>
+          <div class="wa-collage-footer">
+            <div class="wa-collage-caption" title="${escapeHtml(caption)}">
+              ${escapeHtml(caption)}
+            </div>
+            <div class="wa-collage-actions">
+              <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(firstItem.image)}', '${escapeHtml(filename)}')" title="Download">
+                ⬇️ Download
+              </button>
+              <button class="wa-view-all-btn" onclick="openGallery(${firstGlobalIdx})" title="View all photos">
+                👁️ View all (${items.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  let toggleBtnHtml = hasMoreDays ? `
+    <div style="text-align:center; margin-top:14px; padding-top:12px; border-top:1px dashed #e8d5c4;">
+      <button id="publicGalleryToggleBtn" class="public-gallery-toggle-btn" onclick="togglePublicGalleryDays()">
+        ▼ सर्व ${totalDays} दिवसांचे फोटो व व्हिडिओ पहा (View all ${totalDays} days)
+      </button>
+    </div>
+  ` : '';
+
+  let loadMoreBtnHtml = (_allAlankarMeta.length > _alankarLoadedCount) ? `
+    <div class="gallery-load-more-wrap" style="text-align:center; margin-top:14px; padding-top:12px; border-top:1px dashed #e8d5c4;">
+      <button id="galleryLoadMoreBtn" class="gallery-load-more-btn" onclick="loadMoreGalleryPhotos()">
+        📷 आणखी फोटो पहा (Load More Photos — ${_alankarLoadedCount} of ${_allAlankarMeta.length})
+      </button>
+    </div>
+  ` : '';
+
+  return dayCardsHtml + toggleBtnHtml + loadMoreBtnHtml;
+}
+
+function renderPublicDocumentsHtml() {
+  if (_documentsLoading && (!db.documents || !db.documents.length)) {
+    return `
+      <div class="gallery-in-place-loader" style="padding:18px 14px;">
+        <div class="gallery-loader-top">
+          <span class="gallery-spin-icon">📁</span>
+          <div class="gallery-loader-text">
+            <strong>अधिकृत परवानग्या लोड होत आहेत...</strong>
+            <span>कृपया क्षणभर थांबा (Loading Official Permissions...)</span>
+          </div>
+        </div>
+      </div>
+    `;
   }
+
+  if (!db.documents || !db.documents.length) {
+    return `
+      <div class="empty" style="padding:28px 16px; text-align:center;">
+        <div class="empty-icon" style="font-size:40px; margin-bottom:8px;">📁</div>
+        <p style="color:#6e584f; font-size:13px; margin:0;">अद्याप कोणत्याही अधिकृत परवानग्या नोंदवलेल्या नाहीत.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:10px;">
+      ${db.documents.map(doc => {
+        let hasPhoto = hasValidImage(doc.image) || doc.hasFile;
+        let isPdf = isPdfData(doc.image) || doc.fileType === 'pdf';
+        let statusColor = doc.status === 'Approved' ? '#15803d' : '#b45309';
+        let statusBg   = doc.status === 'Approved' ? '#dcfce7' : '#fef3c7';
+        return `
+        <div style="background:#fff8f5; border:1px solid #f0d9cc; border-radius:12px; padding:14px 14px 12px 14px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <span style="font-size:26px;">${doc.icon || '📁'}</span>
+            <div>
+              <div style="font-weight:700; font-size:13px; color:#2c1b18; line-height:1.3;">${escapeHtml(doc.title)}</div>
+              <div style="font-size:11px; color:#6e584f; margin-top:2px;">${escapeHtml(doc.issuedBy || 'अधिकृत विभाग')}</div>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+            <span style="font-size:11px; padding:3px 10px; border-radius:6px; font-weight:700; background:${statusBg}; color:${statusColor};">● ${escapeHtml(doc.status || 'Pending')}</span>
+            ${doc.validUntil ? `<span style="font-size:11px; color:#6e584f;">वैधता: ${escapeHtml(doc.validUntil)}</span>` : ''}
+          </div>
+          ${hasPhoto ? `
+            <div style="margin-top:10px;">
+              <button class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="openDocumentPublic('${escapeHtml(doc.id)}')">
+                ${isPdf ? '📄 View PDF Document' : '🖼️ View Permission Photo'}
+              </button>
+            </div>
+          ` : `<div style="margin-top:8px; font-size:11px; color:#9ca3af;">⏳ Photo / PDF not yet uploaded</div>`}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+/* PUBLIC DEVOTEE & TRANSPARENCY DASHBOARD */
+function publicView() {
+  // On public.html the mandal name comes from the URL param (loaded by loadPublicMandalData)
+  let inc = sum(db.donations), exp = sum(db.expenses), bal = inc - exp;
+  let sortedDonations = sortByNewest(db.donations);
+  let sortedExpenses = sortByNewest(db.expenses);
+  let upcomingEvents = sortEventsNewestFirst(db.events).slice(0, 6);
+  let contactsList = db.contacts && db.contacts.length ? db.contacts : [];
 
   let galleryHeading = (currentMandal.slug === 'vrindavan' || (currentMandal.name && currentMandal.name.includes('वृंदावन')))
     ? 'वृंदावन मंडळ Photo Gallery'
@@ -1561,6 +1699,7 @@ function publicView() {
 
   let expenseRows = sortedExpenses.map((e, index) => {
     let isExtra = index >= 4;
+    let hasBillAvailable = e.hasBill || hasValidImage(e.image);
     return `
       <tr class="${isExtra ? 'extra-expense-row' : ''}" style="${isExtra ? 'display:none;' : ''}">
         <td>${dateLabelInMarathi(e.date)}</td>
@@ -1569,7 +1708,7 @@ function publicView() {
           <br><small class="muted">${escapeHtml(e.category)} • Paid by ${escapeHtml(e.paidBy)}</small>
         </td>
         <td class="amount expense-t">${rupees(e.amount)}</td>
-        <td>${hasValidImage(e.image) ? `<button class="text-link view-bill-btn" onclick="openBill('${escapeHtml(e.image)}')">👁 Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}</td>
+        <td>${hasBillAvailable ? `<button class="text-link view-bill-btn" onclick="viewExpenseBill('${escapeHtml(e.id)}')">👁 Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}</td>
       </tr>
     `;
   }).join('');
@@ -1634,13 +1773,15 @@ function publicView() {
         </div>
       </section>
 
-      <!-- Section 2: Daily Bappa Alankar & Mukh Darshan Gallery -->
-      <div class="card" style="margin-bottom:20px;">
+      <!-- Section 2: Daily Bappa Alankar & Mukh Darshan Gallery (Lazy Loaded) -->
+      <div class="card" id="publicGallerySection" style="margin-bottom:20px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
           <h3>🌺 ${galleryHeading}</h3>
           <span style="font-size:11px; color:#8b261e; font-weight:600;">👆 फोटो/व्हिडिओवर टॅप करा — स्लाइड करा (Swipe Gallery)</span>
         </div>
-        ${galleryHtml}
+        <div id="publicGalleryContent">
+          ${renderPublicGalleryHtml()}
+        </div>
       </div>
 
       <!-- Section 3: Aarti Timetable (2 Days Shown + View More Toggle) & Announcements -->
@@ -1694,48 +1835,15 @@ function publicView() {
         </div>
       </div>
 
-      <!-- Section 5: Official Permissions & Documents -->
-      <div class="card" style="margin-bottom:20px;">
+      <!-- Section 5: Official Permissions & Documents (Lazy Loaded) -->
+      <div class="card" id="publicDocumentsSection" style="margin-bottom:20px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
           <h3>📁 अधिकृत परवानग्या व कागदपत्रे (Official Permissions)</h3>
           <span style="font-size:11px; color:#8b261e; font-weight:600;">(मंडळाच्या कायदेशीर परवानग्यांची यादी)</span>
         </div>
-        ${(db.documents && db.documents.length) ? `
-          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:10px;">
-            ${db.documents.map(doc => {
-              let hasPhoto = hasValidImage(doc.image) || doc.hasFile;
-              let isPdf = isPdfData(doc.image) || doc.fileType === 'pdf';
-              let statusColor = doc.status === 'Approved' ? '#15803d' : '#b45309';
-              let statusBg   = doc.status === 'Approved' ? '#dcfce7' : '#fef3c7';
-              return `
-              <div style="background:#fff8f5; border:1px solid #f0d9cc; border-radius:12px; padding:14px 14px 12px 14px;">
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                  <span style="font-size:26px;">${doc.icon || '📁'}</span>
-                  <div>
-                    <div style="font-weight:700; font-size:13px; color:#2c1b18; line-height:1.3;">${escapeHtml(doc.title)}</div>
-                    <div style="font-size:11px; color:#6e584f; margin-top:2px;">${escapeHtml(doc.issuedBy || 'अधिकृत विभाग')}</div>
-                  </div>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-                  <span style="font-size:11px; padding:3px 10px; border-radius:6px; font-weight:700; background:${statusBg}; color:${statusColor};">● ${escapeHtml(doc.status || 'Pending')}</span>
-                  ${doc.validUntil ? `<span style="font-size:11px; color:#6e584f;">वैधता: ${escapeHtml(doc.validUntil)}</span>` : ''}
-                </div>
-                ${hasPhoto ? `
-                  <div style="margin-top:10px;">
-                    <button class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="openDocumentPublic('${escapeHtml(doc.id)}')">
-                      ${isPdf ? '📄 View PDF Document' : '🖼️ View Permission Photo'}
-                    </button>
-                  </div>
-                ` : `<div style="margin-top:8px; font-size:11px; color:#9ca3af;">⏳ Photo / PDF not yet uploaded</div>`}
-              </div>`;
-            }).join('')}
-          </div>
-        ` : `
-          <div class="empty" style="padding:28px 16px; text-align:center;">
-            <div class="empty-icon" style="font-size:40px; margin-bottom:8px;">📁</div>
-            <p style="color:#6e584f; font-size:13px; margin:0;">अद्याप कोणत्याही अधिकृत परवानग्या नोंदवलेल्या नाहीत.</p>
-          </div>
-        `}
+        <div id="publicDocumentsContent">
+          ${renderPublicDocumentsHtml()}
+        </div>
       </div>
 
       <!-- Section 6: Public Committee Contacts with Call & WhatsApp Buttons -->
@@ -1799,6 +1907,294 @@ function publicView() {
     </div>
   `;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════════
+   INTERSECTION OBSERVER & ON-DEMAND LOADERS (GALLERY, DOCUMENTS, BILLS)
+   ════════════════════════════════════════════════════════════════════════════════ */
+
+function setupPublicIntersectionObservers() {
+  if (typeof IntersectionObserver === 'undefined') {
+    // Fallback for older browsers: trigger immediately
+    fetchLazyGallery();
+    fetchLazyDocuments();
+    return;
+  }
+
+  let galleryEl = document.getElementById('publicGallerySection');
+  if (galleryEl && !_galleryLoaded && !_galleryLoading) {
+    let gObserver = new IntersectionObserver((entries, observer) => {
+      for (let entry of entries) {
+        if (entry.isIntersecting) {
+          observer.unobserve(entry.target);
+          fetchLazyGallery();
+          break;
+        }
+      }
+    }, { rootMargin: '300px 0px' });
+    gObserver.observe(galleryEl);
+  }
+
+  let docsEl = document.getElementById('publicDocumentsSection');
+  if (docsEl && !_documentsLoaded && !_documentsLoading) {
+    let dObserver = new IntersectionObserver((entries, observer) => {
+      for (let entry of entries) {
+        if (entry.isIntersecting) {
+          observer.unobserve(entry.target);
+          fetchLazyDocuments();
+          break;
+        }
+      }
+    }, { rootMargin: '300px 0px' });
+    dObserver.observe(docsEl);
+  }
+}
+
+async function fetchLazyGallery() {
+  if (_galleryLoaded || _galleryLoading) return;
+  _galleryLoading = true;
+  let t0 = Date.now();
+  try {
+    let restHeaders = {
+      'apikey': CLOUD_CONFIG.publishableKey,
+      'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey
+    };
+
+    // Step 1: Fetch gallery metadata ONLY (NO heavy Base64 images! ~4KB)
+    let meta = [];
+    if (cloud) {
+      let { data, error } = await cloud
+        .from('alankar')
+        .select('id,mandal_id,date,type,note,created_at')
+        .eq('mandal_id', currentMandal.id)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) meta = data;
+    } else {
+      let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar?select=id,mandal_id,date,type,note,created_at&mandal_id=eq.${encodeURIComponent(currentMandal.id)}&order=date.desc,created_at.desc`, { headers: restHeaders });
+      if (res.ok) {
+        let rows = await res.json();
+        if (Array.isArray(rows)) meta = rows;
+      }
+    }
+
+    let durMeta = Date.now() - t0;
+    logPerfMetric('Lazy Gallery Metadata Fetch (Zero Base64 Images)', durMeta, meta.length, JSON.stringify(meta).length);
+    _allAlankarMeta = meta.map(r => fromCloud('alankar', r));
+
+    if (!_allAlankarMeta.length) {
+      _galleryLoaded = true;
+      _galleryLoading = false;
+      _alankarLoading = false;
+      db.alankar = [];
+      updateGalleryDom();
+      return;
+    }
+
+    // Step 2: Fetch first batch of images (first 4 items only)
+    await loadGalleryImageBatch(0, _alankarPageSize);
+    _galleryLoaded = true;
+  } catch(err) {
+    console.warn('Lazy gallery error:', err);
+  } finally {
+    _galleryLoading = false;
+    _alankarLoading = false;
+  }
+}
+
+async function loadGalleryImageBatch(startIndex, count) {
+  let slice = _allAlankarMeta.slice(startIndex, startIndex + count);
+  if (!slice.length) return;
+  let ids = slice.map(x => x.id);
+  let t0 = Date.now();
+  let imgMap = new Map();
+  try {
+    let restHeaders = {
+      'apikey': CLOUD_CONFIG.publishableKey,
+      'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey
+    };
+    if (cloud) {
+      let { data, error } = await cloud.from('alankar').select('id,image').in('id', ids);
+      if (!error && Array.isArray(data)) {
+        data.forEach(r => imgMap.set(String(r.id), r.image));
+      }
+    } else {
+      let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar?select=id,image&id=in.(${ids.map(encodeURIComponent).join(',')})`, { headers: restHeaders });
+      if (res.ok) {
+        let rows = await res.json();
+        if (Array.isArray(rows)) rows.forEach(r => imgMap.set(String(r.id), r.image));
+      }
+    }
+    let dur = Date.now() - t0;
+    let bytes = Array.from(imgMap.values()).reduce((s, img) => s + (img ? img.length : 0), 0);
+    logPerfMetric(`Gallery Image Batch [${startIndex}..${startIndex + count}]`, dur, imgMap.size, bytes);
+  } catch(e) {
+    console.warn('Gallery image batch fetch error:', e);
+  }
+
+  slice.forEach(item => {
+    let img = imgMap.get(String(item.id)) || '';
+    item.image = img;
+    item.image_url = img;
+  });
+
+  _alankarLoadedCount = Math.min(_allAlankarMeta.length, startIndex + count);
+  db.alankar = _allAlankarMeta.slice(0, _alankarLoadedCount);
+  updateGalleryDom();
+}
+
+async function loadMoreGalleryPhotos() {
+  let btn = document.getElementById('galleryLoadMoreBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ फोटो लोड होत आहेत... (Loading next 4 photos...)';
+  }
+  await loadGalleryImageBatch(_alankarLoadedCount, _alankarPageSize);
+}
+window.loadMoreGalleryPhotos = loadMoreGalleryPhotos;
+
+function updateGalleryDom() {
+  let content = document.getElementById('publicGalleryContent');
+  if (content) {
+    content.innerHTML = renderPublicGalleryHtml();
+  }
+}
+
+async function fetchLazyDocuments() {
+  if (_documentsLoaded || _documentsLoading) return;
+  _documentsLoading = true;
+  let t0 = Date.now();
+  try {
+    let restHeaders = {
+      'apikey': CLOUD_CONFIG.publishableKey,
+      'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey
+    };
+    let cols = tableColumns.document;
+    let docs = [];
+    if (cloud) {
+      let { data, error } = await cloud.from('documents').select(cols).eq('mandal_id', currentMandal.id);
+      if (!error && Array.isArray(data)) docs = data;
+    } else {
+      let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/documents?select=${cols}&mandal_id=eq.${encodeURIComponent(currentMandal.id)}`, { headers: restHeaders });
+      if (res.ok) {
+        let rows = await res.json();
+        if (Array.isArray(rows)) docs = rows;
+      }
+    }
+
+    // Check which documents have attached files without downloading large Base64
+    try {
+      let fileRows = [];
+      if (cloud) {
+        let { data: fc } = await cloud.from('documents').select('id').not('image', 'is', null).neq('image', '').eq('mandal_id', currentMandal.id);
+        if (Array.isArray(fc)) fileRows = fc;
+      } else {
+        let fcRes = await fetch(`${CLOUD_CONFIG.url}/rest/v1/documents?select=id&image=not.is.null&image=neq.&mandal_id=eq.${encodeURIComponent(currentMandal.id)}`, { headers: restHeaders });
+        if (fcRes.ok) {
+          let rows = await fcRes.json();
+          if (Array.isArray(rows)) fileRows = rows;
+        }
+      }
+      let docFileSet = new Set(fileRows.map(x => String(x.id)));
+      docs.forEach(d => {
+        d.hasFile = docFileSet.has(String(d.id));
+      });
+    } catch(e) {}
+
+    let dur = Date.now() - t0;
+    logPerfMetric('Lazy Documents Metadata Fetch', dur, docs.length, JSON.stringify(docs).length);
+    db.documents = docs.map(r => fromCloud('document', r));
+    _documentsLoaded = true;
+    updateDocumentsDom();
+  } catch(err) {
+    console.warn('Lazy documents fetch error:', err);
+  } finally {
+    _documentsLoading = false;
+  }
+}
+
+function updateDocumentsDom() {
+  let content = document.getElementById('publicDocumentsContent');
+  if (content) {
+    content.innerHTML = renderPublicDocumentsHtml();
+  }
+}
+
+async function viewExpenseBill(expenseId) {
+  let e = (db.expenses || []).find(x => String(x.id) === String(expenseId));
+  if (e && hasValidImage(e.image)) {
+    openBill(e.image);
+    return;
+  }
+  showLoader('बिलाचा फोटो लोड होत आहे... (Loading bill...)');
+  let t0 = Date.now();
+  let img = '';
+  try {
+    let restHeaders = {
+      'apikey': CLOUD_CONFIG.publishableKey,
+      'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey
+    };
+    if (cloud) {
+      let { data, error } = await cloud.from('expenses').select('image_url').eq('id', expenseId).maybeSingle();
+      if (!error && data && data.image_url) img = data.image_url;
+    } else {
+      let r = await fetch(`${CLOUD_CONFIG.url}/rest/v1/expenses?select=image_url&id=eq.${encodeURIComponent(expenseId)}`, { headers: restHeaders });
+      if (r.ok) {
+        let rows = await r.json();
+        if (Array.isArray(rows) && rows[0] && rows[0].image_url) img = rows[0].image_url;
+      }
+    }
+    let dur = Date.now() - t0;
+    logPerfMetric('Lazy Bill Fetch (' + String(expenseId).slice(0, 8) + ')', dur, 1, img.length);
+  } catch(err) {
+    console.warn('Bill fetch error:', err);
+  }
+  hideLoader();
+  if (e) {
+    e.image = img;
+    e.image_url = img;
+  }
+  if (hasValidImage(img)) {
+    openBill(img);
+  } else {
+    toast('या खर्चासाठी बिल उपलब्ध नाही (No bill uploaded)');
+  }
+}
+window.viewExpenseBill = viewExpenseBill;
+
+async function openExpenseFormWithImage(id) {
+  closeModal();
+  let item = getItem('expense', id);
+  if (item && item.hasBill && !hasValidImage(item.image)) {
+    showLoader('बिलाची माहिती लोड होत आहे...');
+    try {
+      if (cloud) {
+        let { data } = await cloud.from('expenses').select('image_url').eq('id', id).maybeSingle();
+        if (data && data.image_url) item.image = data.image_url;
+      }
+    } catch(e) {}
+    hideLoader();
+  }
+  openForm('expense', item);
+}
+window.openExpenseFormWithImage = openExpenseFormWithImage;
+
+async function openDocFormWithImage(id) {
+  closeModal();
+  let item = getItem('document', id);
+  if (item && item.hasFile && !hasValidImage(item.image)) {
+    showLoader('कागदपत्र लोड होत आहे...');
+    try {
+      if (cloud) {
+        let { data } = await cloud.from('documents').select('image').eq('id', id).maybeSingle();
+        if (data && data.image) item.image = data.image;
+      }
+    } catch(e) {}
+    hideLoader();
+  }
+  openDocForm(item);
+}
+window.openDocFormWithImage = openDocFormWithImage;
+
 
 async function fetchVisitorCount(slug) {
   let isNewSession = !safeSessionGet('mandal_visit_counted_' + slug);
@@ -2056,7 +2452,18 @@ function galleryPrev() {
   if (_galleryIdx > 0) { _galleryIdx--; _renderGalleryLightbox(); }
 }
 function galleryNext() {
-  if (_galleryIdx < _galleryItems.length - 1) { _galleryIdx++; _renderGalleryLightbox(); }
+  if (_galleryIdx < _galleryItems.length - 1) {
+    _galleryIdx++;
+    _renderGalleryLightbox();
+  } else if (_allAlankarMeta && _allAlankarMeta.length > _alankarLoadedCount) {
+    loadGalleryImageBatch(_alankarLoadedCount, _alankarPageSize).then(() => {
+      _galleryItems = sortByNewest((db.alankar || []).filter(a => hasValidImage(a.image)));
+      if (_galleryIdx < _galleryItems.length - 1) {
+        _galleryIdx++;
+        _renderGalleryLightbox();
+      }
+    });
+  }
 }
 function closeGallery() {
   let prevVideo = document.querySelector('.gallery-lb-video');
@@ -2300,14 +2707,15 @@ function expenses() {
   let list = sortByNewest(db.expenses);
   let total = sum(list);
   let groups = cats.map(c => [c, sum(list.filter(x => x.category === c))]).filter(x => x[1]);
-
-  let rows = list.map(e => `
+  let rows = list.map(e => {
+    let hasBillAvailable = e.hasBill || hasValidImage(e.image);
+    return `
     <tr>
       <td>${dateLabel(e.date)}</td>
       <td>
         <div class="trans-info">
           <strong>${escapeHtml(e.description)}</strong>
-          <span>${escapeHtml(e.category)}${hasValidImage(e.image) ? ' • 📎 Bill Attached' : ''}</span>
+          <span>${escapeHtml(e.category)}${hasBillAvailable ? ' • 📎 Bill Attached' : ''}</span>
         </div>
       </td>
       <td>
@@ -2316,13 +2724,16 @@ function expenses() {
       </td>
       <td class="amount expense-t">${rupees(e.amount)}</td>
       <td>
-        ${hasValidImage(e.image) ? `<button class="text-link view-bill-btn" onclick="openBill('${escapeHtml(e.image)}')">👁 View Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}
+        ${hasBillAvailable ? `<button class="text-link view-bill-btn" onclick="viewExpenseBill('${escapeHtml(e.id)}')">👁 View Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}
       </td>
       <td><button class="table-action" onclick="guardEdit('expense','${e.id}')">•••</button></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
-  let cards = list.map(e => `
+  let cards = list.map(e => {
+    let hasBillAvailable = e.hasBill || hasValidImage(e.image);
+    return `
     <article class="expense-card">
       <div class="expense-card-main">
         <span class="expense-meta">${dateLabel(e.date)} · ${escapeHtml(e.category)}</span>
@@ -2331,11 +2742,12 @@ function expenses() {
       </div>
       <div class="expense-card-actions">
         <b class="amount expense-t">${rupees(e.amount)}</b>
-        ${hasValidImage(e.image) ? `<button class="text-link view-bill-btn" onclick="openBill('${escapeHtml(e.image)}')">👁 View Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}
+        ${hasBillAvailable ? `<button class="text-link view-bill-btn" onclick="viewExpenseBill('${escapeHtml(e.id)}')">👁 View Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}
         <button class="table-action" onclick="guardEdit('expense','${e.id}')">•••</button>
       </div>
     </article>
-  `).join('');
+  `;
+  }).join('');
 
   return shell(
     'Expenses',
@@ -3642,14 +4054,15 @@ function manageDocument(id) {
   modal('Manage Official Document / Permission', `
     <p class="delete-text">PIN verified. You can edit permission details, upload/replace photo, or delete this permission.</p>
     <div class="modal-actions" style="justify-content:center; gap:10px;">
-      <button class="outline-btn" onclick="openDocForm(getItem('document','${id}'))">✏️ Edit Details & Photo</button>
+      <button class="outline-btn" onclick="openDocFormWithImage('${id}')">✏️ Edit Details & Photo</button>
       <button class="primary-btn" style="background:#dc2626; border-color:#dc2626;" onclick="confirmDelete('document','${id}')">🗑️ Delete Permission</button>
     </div>
   `);
 }
 
 function manageFinancial(type, id) {
-  modal('Manage financial entry', `<p class="delete-text">The PIN has been verified. You can now edit or remove this ${type} entry.</p><div class="modal-actions"><button class="outline-btn" onclick="openForm('${type}',getItem('${type}','${id}'))">Edit</button><button class="primary-btn" onclick="confirmDelete('${type}','${id}')">Delete</button></div>`);
+  let editCall = type === 'expense' ? `openExpenseFormWithImage('${id}')` : `openForm('${type}',getItem('${type}','${id}'))`;
+  modal('Manage financial entry', `<p class="delete-text">The PIN has been verified. You can now edit or remove this ${type} entry.</p><div class="modal-actions"><button class="outline-btn" onclick="${editCall}">Edit</button><button class="primary-btn" onclick="confirmDelete('${type}','${id}')">Delete</button></div>`);
 }
 
 function editItem(type, id) {
@@ -4516,26 +4929,50 @@ async function loadPublicMandalData() {
   // 3. Reset local memory to clean state for this mandal
   db = { donations: [], expenses: [], aartis: [], events: [], contacts: [], alankar: [], documents: [], settings: seed.settings };
   _alankarLoading = true;
+  _galleryLoaded = false;
+  _galleryLoading = false;
+  _documentsLoaded = false;
+  _documentsLoading = false;
+  _allAlankarMeta = [];
+  _alankarLoadedCount = 0;
 
-  // 4. Load table data with guaranteed minimum display time for the Bappa loader & facts
+  // 4. Load table data with fast pleasant display time (1.2 seconds) for the Bappa loader & blessing
   try {
-    let minLoaderPromise = new Promise(resolve => setTimeout(resolve, 5000));
+    let tStart = Date.now();
+    let minLoaderPromise = new Promise(resolve => setTimeout(resolve, 1200));
     if (cloud) {
       await Promise.all([loadCloud(true), minLoaderPromise]);
     } else {
-      // Fallback: direct REST API loader for each table
-      let types = Object.keys(tableName);
+      // Fallback: direct REST API loader for priority tables only
+      let types = ['donation', 'expense', 'aarti', 'event', 'contact'];
       let restLoader = Promise.allSettled(types.map(async (type) => {
-        let r = await fetch(`${CLOUD_CONFIG.url}/rest/v1/${tableName[type]}?select=*&mandal_id=eq.${encodeURIComponent(mandalData.id)}`, { headers: restHeaders });
+        let cols = tableColumns[type] || '*';
+        let r = await fetch(`${CLOUD_CONFIG.url}/rest/v1/${tableName[type]}?select=${cols}&mandal_id=eq.${encodeURIComponent(mandalData.id)}`, { headers: restHeaders });
         if (r.ok) {
           let rows = await r.json();
           if (Array.isArray(rows)) {
+            if (type === 'expense') {
+              try {
+                let br = await fetch(`${CLOUD_CONFIG.url}/rest/v1/expenses?select=id&image_url=not.is.null&image_url=neq.&mandal_id=eq.${encodeURIComponent(mandalData.id)}`, { headers: restHeaders });
+                if (br.ok) {
+                  let bRows = await br.json();
+                  let bSet = new Set(bRows.map(x => String(x.id)));
+                  rows.forEach(x => { x.hasBill = bSet.has(String(x.id)); });
+                }
+              } catch(e) {}
+            }
             db[listName[type]] = rows.map(row => fromCloud(type, row));
           }
         }
       }));
       await Promise.all([restLoader, minLoaderPromise]);
     }
+    let totalInitialDur = Date.now() - tStart;
+    let estTotalBytes = ['donations', 'expenses', 'aartis', 'events', 'contacts']
+      .reduce((sum, k) => sum + JSON.stringify(db[k] || []).length, 0);
+    let totalRecords = ['donations', 'expenses', 'aartis', 'events', 'contacts']
+      .reduce((sum, k) => sum + (db[k] || []).length, 0);
+    logPerfMetric('INITIAL PUBLIC PORTAL PAYLOAD', totalInitialDur, totalRecords, estTotalBytes);
   } catch(dataErr) {
     console.warn('Data load note (continuing to render):', dataErr);
   }
