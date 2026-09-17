@@ -3180,7 +3180,232 @@ function reports() {
 }
 
 let alankarSelectedPhotos = [];
-let selectedAlankarVideoFile = null;
+let alankarSelectedVideos = [];
+
+/* ── In-Browser Client-Side Video Compressor ────────────────────────────── */
+async function compressVideo(file, onProgress) {
+  // 1. Skip compression if file is already compact (<= 2.5 MB)
+  if (!file || file.size <= 2.5 * 1024 * 1024) {
+    if (typeof onProgress === 'function') onProgress(100);
+    return file;
+  }
+
+  // 2. Check browser support for MediaRecorder & canvas captureStream
+  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) {
+    console.warn('MediaRecorder or captureStream not supported; using original video');
+    if (typeof onProgress === 'function') onProgress(100);
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    let video = document.createElement('video');
+    video.muted = false; // Web Audio API captures audio cleanly without speaker output
+    video.playsInline = true;
+    video.preload = 'auto';
+
+    let objectUrl = URL.createObjectURL(file);
+    video.src = objectUrl;
+
+    let resolved = false;
+    let timeoutId = setTimeout(() => {
+      finish(file);
+    }, 45000); // 45s safety timeout
+
+    function finish(resFile) {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutId);
+      try { video.pause(); } catch(e) {}
+      URL.revokeObjectURL(objectUrl);
+      video.remove();
+      if (typeof onProgress === 'function') onProgress(100);
+      resolve(resFile);
+    }
+
+    video.onloadedmetadata = async () => {
+      try {
+        let origWidth = video.videoWidth || 720;
+        let origHeight = video.videoHeight || 1280;
+        let duration = video.duration || 10;
+
+        // Target maximum dimension: 720px for crisp mobile darshan viewing
+        let maxDim = 720;
+        let scale = Math.min(1, maxDim / Math.max(origWidth, origHeight));
+        let targetWidth = Math.max(320, Math.round((origWidth * scale) / 2) * 2);
+        let targetHeight = Math.max(320, Math.round((origHeight * scale) / 2) * 2);
+
+        let canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        let ctx = canvas.getContext('2d', { alpha: false });
+
+        // Stream canvas at 24fps
+        let stream = canvas.captureStream(24);
+
+        // Silent Web Audio Capture (preserves sound without phone speaker blast)
+        let audioCtx = null;
+        try {
+          let AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            audioCtx = new AudioContextClass();
+            let source = audioCtx.createMediaElementSource(video);
+            let dest = audioCtx.createMediaStreamDestination();
+            source.connect(dest);
+            let aTracks = dest.stream.getAudioTracks();
+            if (aTracks && aTracks.length) {
+              stream.addTrack(aTracks[0]);
+            }
+          }
+        } catch(audioErr) {
+          try {
+            let vStream = video.captureStream ? video.captureStream() : (video.mozCaptureStream ? video.mozCaptureStream() : null);
+            if (vStream && vStream.getAudioTracks().length) {
+              stream.addTrack(vStream.getAudioTracks()[0]);
+            }
+          } catch(e2) {}
+        }
+
+        // Determine best supported mimeType
+        let candidateTypes = [
+          'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+          'video/mp4',
+          'video/webm;codecs=vp8,opus',
+          'video/webm;codecs=vp9,opus',
+          'video/webm'
+        ];
+        let chosenMime = 'video/webm';
+        for (let t of candidateTypes) {
+          if (MediaRecorder.isTypeSupported(t)) {
+            chosenMime = t;
+            break;
+          }
+        }
+
+        // Encode with target bitrate ~1.0 Mbps
+        let recorder = new MediaRecorder(stream, {
+          mimeType: chosenMime,
+          videoBitsPerSecond: 1000000
+        });
+
+        let chunks = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+
+        recorder.onstop = () => {
+          try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch(e) {}
+          let blob = new Blob(chunks, { type: chosenMime });
+          if (blob.size < file.size && blob.size > 2048) {
+            let ext = chosenMime.includes('mp4') ? 'mp4' : 'webm';
+            let compressedName = file.name.replace(/\.[^.]+$/, `.${ext}`);
+            let compressedFile = new File([blob], compressedName, { type: chosenMime });
+            console.log(`⚡ Video compressed: ${(file.size / 1024 / 1024).toFixed(1)} MB → ${(compressedFile.size / 1024 / 1024).toFixed(1)} MB`);
+            finish(compressedFile);
+          } else {
+            finish(file);
+          }
+        };
+
+        let isRunning = true;
+        function renderFrame() {
+          if (!isRunning || video.paused || video.ended) return;
+          ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+          if (typeof onProgress === 'function' && duration > 0) {
+            let pct = Math.min(99, Math.round((video.currentTime / duration) * 100));
+            onProgress(pct);
+          }
+          requestAnimationFrame(renderFrame);
+        }
+
+        video.onended = () => {
+          isRunning = false;
+          if (recorder.state === 'recording') recorder.stop();
+        };
+
+        recorder.start(100);
+
+        try {
+          await video.play();
+        } catch(playErr) {
+          try {
+            video.muted = true;
+            await video.play();
+          } catch(mutedErr) {
+            console.warn('Video playback restricted; using original file:', mutedErr);
+            if (recorder.state === 'recording') recorder.stop();
+            finish(file);
+            return;
+          }
+        }
+        renderFrame();
+      } catch(encErr) {
+        console.warn('Video encoding exception, using original file:', encErr);
+        finish(file);
+      }
+    };
+
+    video.onerror = () => {
+      console.warn('Video load error, using original file');
+      finish(file);
+    };
+  });
+}
+
+/* ── Resilient Cloud Sync Helper for Alankar Media ──────────────────────── */
+async function syncAlankarItemToCloud(item) {
+  let payload = toCloud('alankar', item);
+  let confirmedData = null;
+
+  // Step 1: Try Supabase JS client with metadata-only select (prevents 15MB download back!)
+  if (cloud) {
+    try {
+      let { data, error } = await cloud
+        .from('alankar')
+        .upsert(payload, { onConflict: 'id' })
+        .select('id,mandal_id,date,type,note,created_at')
+        .maybeSingle();
+
+      if (!error && data) {
+        confirmedData = data;
+        return { ok: true, data: confirmedData };
+      }
+      if (error) console.warn('Supabase JS upsert error, trying REST fallback:', error);
+    } catch(e) {
+      console.warn('Supabase JS client exception, trying REST fallback:', e);
+    }
+  }
+
+  // Step 2: Direct REST API fallback with 60s timeout
+  try {
+    let restHeaders = {
+      'apikey': CLOUD_CONFIG.publishableKey,
+      'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    };
+
+    let controller = new AbortController();
+    let timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar`, {
+      method: 'POST',
+      headers: restHeaders,
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      return { ok: true, data: { id: item.id } };
+    }
+    let errText = await res.text();
+    console.warn('REST API alankar upload error:', res.status, errText);
+  } catch(restErr) {
+    console.error('REST API alankar upload exception:', restErr);
+  }
+
+  return { ok: false };
+}
 
 function triggerAlankarPhotoCamera() {
   let inp = document.getElementById('alankarPhotoCameraInput');
@@ -3209,14 +3434,22 @@ function removeAlankarPhoto(idx) {
 
 function renderAlankarPhotoPreviews() {
   let container = document.getElementById('multiPhotoPreview');
+  let submitBtn = document.getElementById('alankarSubmitBtn');
   if (!container) return;
   if (!alankarSelectedPhotos.length) {
     container.innerHTML = '';
+    if (submitBtn && submitBtn.textContent.includes('Photo')) {
+      submitBtn.textContent = 'Upload Photos';
+    }
     return;
+  }
+  let count = alankarSelectedPhotos.length;
+  if (submitBtn && submitBtn.textContent.includes('Photo')) {
+    submitBtn.textContent = count > 1 ? `Upload ${count} Photos` : 'Upload Photo';
   }
   container.innerHTML = `
     <div style="width:100%; font-weight:700; color:#8b261e; font-size:12px; margin-bottom:4px;">
-      ✅ ${alankarSelectedPhotos.length} फोटो निवडले आहेत:
+      ✅ ${count} फोटो निवडले आहेत (${count} photo${count > 1 ? 's' : ''} selected):
     </div>
     ${alankarSelectedPhotos.map((f, i) => {
       let url = URL.createObjectURL(f);
@@ -3240,20 +3473,81 @@ function triggerAlankarVideoGallery() {
   if (inp) { inp.value = ''; inp.click(); }
 }
 
-function removeAlankarVideo() {
-  selectedAlankarVideoFile = null;
-  let cam = document.getElementById('alankarVideoCameraInput');
-  let gal = document.getElementById('alankarVideoGalleryInput');
-  if (cam) cam.value = '';
-  if (gal) gal.value = '';
-  let preview = document.getElementById('videoFilePreview');
-  if (preview) preview.innerHTML = '';
+function onAlankarVideoSelected(input) {
+  if (!input.files || !input.files.length) return;
+  for (let f of Array.from(input.files)) {
+    if (f.type && (f.type.startsWith('video/') || f.name.match(/\.(mp4|mov|webm|mkv|3gp|m4v)$/i))) {
+      if (f.size > 60 * 1024 * 1024) {
+        toast(`⚠️ "${f.name}" ६० MB पेक्षा मोठा आहे. कृपया लहान व्हिडिओ निवडा.`);
+        continue;
+      }
+      let isDup = alankarSelectedVideos.some(x => x.name === f.name && x.size === f.size);
+      if (!isDup) {
+        alankarSelectedVideos.push(f);
+      }
+    }
+  }
+  renderAlankarVideoPreviews();
+}
+
+function removeAlankarVideo(idx) {
+  alankarSelectedVideos.splice(idx, 1);
+  renderAlankarVideoPreviews();
+}
+
+function renderAlankarVideoPreviews() {
+  let container = document.getElementById('videoFilePreview');
+  let submitBtn = document.getElementById('alankarSubmitBtn');
+  if (!container) return;
+
+  if (!alankarSelectedVideos.length) {
+    container.innerHTML = '';
+    if (submitBtn && submitBtn.textContent.includes('Video')) {
+      submitBtn.textContent = 'Upload Video';
+    }
+    return;
+  }
+
+  let count = alankarSelectedVideos.length;
+  if (submitBtn && submitBtn.textContent.includes('Video')) {
+    submitBtn.textContent = count > 1 ? `Upload ${count} Videos` : 'Upload Video';
+  }
+
+  let html = `
+    <div style="width:100%; font-weight:700; color:#8b261e; font-size:12px; margin:6px 0 2px;">
+      ✅ ${count} व्हिडिओ निवडले आहेत (${count} video${count > 1 ? 's' : ''} selected):
+    </div>
+    <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
+  `;
+
+  alankarSelectedVideos.forEach((f, i) => {
+    let sizeMb = (f.size / (1024 * 1024)).toFixed(1);
+    let needsCompress = f.size > 2.5 * 1024 * 1024;
+    html += `
+      <div class="video-preview-card">
+        <div class="video-preview-thumb">
+          <span style="font-size:20px;">🎥</span>
+        </div>
+        <div class="video-preview-info">
+          <div class="video-preview-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
+          <div class="video-preview-meta">
+            <span>💾 ${sizeMb} MB</span>
+            ${needsCompress ? `<span class="video-chip-compress">⚡ Auto-compress</span>` : `<span style="color:#059669; font-size:10px; font-weight:700;">✓ Optimal size</span>`}
+          </div>
+        </div>
+        <button type="button" class="media-preview-remove" style="position:static; flex-shrink:0; width:24px; height:24px;" onclick="removeAlankarVideo(${i})" title="Remove">✕</button>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
 }
 
 /* Form Uploader supporting Single/Multiple Photos and Direct Video Uploads */
 function openAlankarForm() {
   alankarSelectedPhotos = [];
-  selectedAlankarVideoFile = null;
+  alankarSelectedVideos = [];
   modal(
     'Upload Daily Bappa Mukh Darshan (Photo / Video)',
     `<form onsubmit="submitAlankarForm(event)">
@@ -3295,23 +3589,23 @@ function openAlankarForm() {
 
         <!-- Video Selection with Camera & File Options -->
         <div class="field full" id="alankarVideoField" style="display:none;">
-          <label>Select Bappa Video (व्हिडिओ रेकॉर्ड करा किंवा फाईल निवडा - कमाल १५ MB)</label>
+          <label>Select Bappa Video(s) (व्हिडिओ रेकॉर्ड करा किंवा गॅलरीमधून निवडा — एकाच वेळी अनेक व्हिडिओ निवडू शकता)</label>
           <div class="media-source-picker">
             <div class="media-source-buttons">
               <button type="button" class="media-source-btn camera" onclick="triggerAlankarVideoCamera()">
                 📹 व्हिडिओ रेकॉर्ड करा (Camera)
               </button>
               <button type="button" class="media-source-btn gallery" onclick="triggerAlankarVideoGallery()">
-                📁 फाईलमधून व्हिडिओ निवडा (Files)
+                📁 गॅलरी / फाईलमधून निवडा (Files)
               </button>
             </div>
-            <input id="alankarVideoCameraInput" type="file" accept="video/*" capture="environment" style="display:none;" onchange="previewVideoInput(this)">
-            <input id="alankarVideoGalleryInput" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*" style="display:none;" onchange="previewVideoInput(this)">
+            <input id="alankarVideoCameraInput" type="file" accept="video/*" capture="environment" style="display:none;" onchange="onAlankarVideoSelected(this)">
+            <input id="alankarVideoGalleryInput" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*" multiple style="display:none;" onchange="onAlankarVideoSelected(this)">
           </div>
           <small style="display:block; margin-top:6px; color:#7f1d1d; font-size:11px;">
-            ℹ️ डिव्हाइसमधील MP4 / WebM व्हिडिओ निवडा किंवा कॅमेऱ्याने रेकॉर्ड करा (कमाल आकार: १५ MB).
+            ⚡ <b>Auto-Compression:</b> मोठा व्हिडिओ आपोआप कॉम्प्रेस होऊन जलद अपलोड होतो. एकाच वेळी अनेक व्हिडिओ निवडू शकता.
           </small>
-          <div id="videoFilePreview" style="margin-top:6px; font-weight:600; font-size:12px; color:#9f2e20;"></div>
+          <div id="videoFilePreview" style="margin-top:6px;"></div>
         </div>
 
         <div class="field full"><label>Optional note (विशेष माहिती / टीप)</label><textarea name="note" placeholder="e.g. आजची विशेष महाआरती व फुलांची आरास"></textarea></div>
@@ -3332,36 +3626,22 @@ function toggleAlankarMediaType(type) {
   if (type === 'video') {
     if (photoField) photoField.style.display = 'none';
     if (videoField) videoField.style.display = 'block';
-    if (submitBtn) submitBtn.textContent = 'Upload Video';
+    if (submitBtn) {
+      let count = alankarSelectedVideos.length;
+      submitBtn.textContent = count > 1 ? `Upload ${count} Videos` : 'Upload Video';
+    }
   } else {
     if (photoField) photoField.style.display = 'block';
     if (videoField) videoField.style.display = 'none';
-    if (submitBtn) submitBtn.textContent = 'Upload Photos';
+    if (submitBtn) {
+      let count = alankarSelectedPhotos.length;
+      submitBtn.textContent = count > 1 ? `Upload ${count} Photos` : 'Upload Photos';
+    }
   }
 }
 
 function previewVideoInput(input) {
-  let preview = document.getElementById('videoFilePreview');
-  if (!preview) return;
-  let file = input.files && input.files[0];
-  if (!file) {
-    preview.innerHTML = '';
-    selectedAlankarVideoFile = null;
-    return;
-  }
-  let sizeMb = (file.size / (1024 * 1024)).toFixed(2);
-  if (file.size > 15 * 1024 * 1024) {
-    preview.innerHTML = `<span style="color:#dc2626;">⚠️ फाईल आकार: ${sizeMb} MB. हा व्हिडिओ १५ MB पेक्षा मोठा आहे. कृपया १५ MB पेक्षा लहान व्हिडिओ निवडा.</span>`;
-    input.value = '';
-    selectedAlankarVideoFile = null;
-  } else {
-    selectedAlankarVideoFile = file;
-    preview.innerHTML = `
-      <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-        <span style="color:#15803d;">🎥 निवडलेला व्हिडिओ: <b>${escapeHtml(file.name)}</b> (${sizeMb} MB)</span>
-        <button type="button" class="media-preview-remove" style="position:static; width:22px; height:22px;" onclick="removeAlankarVideo()" title="Remove">✕</button>
-      </div>`;
-  }
+  onAlankarVideoSelected(input);
 }
 
 function previewMultiInput(input) {
@@ -3382,56 +3662,60 @@ async function submitAlankarForm(ev) {
 
   // ── Handle Video Upload ──────────────────────────────────────────
   if (mediaType === 'video') {
-    let videoFile = selectedAlankarVideoFile;
-    if (!videoFile) {
+    let videos = alankarSelectedVideos && alankarSelectedVideos.length ? alankarSelectedVideos : [];
+    if (!videos.length) {
       let videoInput = ev.target.querySelector('input[type="file"][accept*="video"]');
-      videoFile = videoInput && videoInput.files ? videoInput.files[0] : null;
+      if (videoInput && videoInput.files && videoInput.files.length) {
+        videos = Array.from(videoInput.files);
+      }
     }
-    if (!videoFile) return toast('कृपया व्हिडिओ निवडा किंवा रेकॉर्ड करा (Please select or record a video file)');
+    if (!videos.length) return toast('कृपया किमान एक व्हिडिओ निवडा किंवा रेकॉर्ड करा (Please select or record at least one video)');
 
-    let maxBytes = 15 * 1024 * 1024;
-    if (videoFile.size > maxBytes) {
-      return toast('⚠️ व्हिडिओ १५ MB पेक्षा मोठा आहे. कृपया १५ MB पेक्षा लहान व्हिडिओ निवडा.');
-    }
+    let total = videos.length;
+    let successCount = 0;
+    let failCount = 0;
 
-    showLoader('Uploading video… please wait');
-    let videoDataUrl = await readFileAsDataUrl(videoFile);
-    if (!videoDataUrl) {
-      hideLoader();
-      return toast('⚠️ व्हिडिओ फाईल वाचता आली नाही.');
-    }
+    for (let idx = 0; idx < total; idx++) {
+      let vFile = videos[idx];
+      let stepNum = idx + 1;
 
-    let itemId = 'k' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100);
-    let item = {
-      id: itemId,
-      title: title,
-      date: date,
-      note: combinedNote,
-      image: videoDataUrl,
-      type: 'video'
-    };
-    db.alankar.unshift(item);
-    save();
+      // 1. Compression with real-time UI feedback
+      showLoader(`व्हिडिओ प्रक्रिया सुरू आहे (${stepNum}/${total}): तयारी करत आहे…`);
+      let processedFile = await compressVideo(vFile, (pct) => {
+        showLoader(`व्हिडिओ कॉम्प्रेस करत आहे (${stepNum}/${total}): ${pct}%`);
+      });
 
-    let cloudOk = true;
-    if (cloud) {
-      try {
-        let payload = toCloud('alankar', item);
-        let { data, error } = await cloud.from('alankar').upsert(payload, { onConflict: 'id' }).select().single();
-        if (error) {
-          console.warn('Alankar video cloud sync error:', error);
-          cloudOk = false;
-        } else if (data) {
-          let idx = db.alankar.findIndex(x => x.id === itemId);
-          if (idx >= 0) {
-            db.alankar[idx] = fromCloud('alankar', data);
-            db.alankar[idx].title = title;
-            db.alankar[idx].type = 'video';
-          }
+      // 2. Read as Base64 Data URL
+      showLoader(`व्हिडिओ अपलोड करत आहे (${stepNum}/${total})…`);
+      let videoDataUrl = await readFileAsDataUrl(processedFile);
+      if (!videoDataUrl) {
+        failCount++;
+        continue;
+      }
+
+      let itemId = 'k' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100) + idx;
+      let item = {
+        id: itemId,
+        title: title,
+        date: date,
+        note: combinedNote,
+        image: videoDataUrl,
+        type: 'video'
+      };
+      db.alankar.unshift(item);
+      save();
+
+      // 3. Resilient Cloud Sync with metadata-only return & REST fallback
+      let res = await syncAlankarItemToCloud(item);
+      if (res.ok) {
+        successCount++;
+        let localIdx = db.alankar.findIndex(x => x.id === itemId);
+        if (localIdx >= 0 && res.data) {
+          db.alankar[localIdx].title = title;
+          db.alankar[localIdx].type = 'video';
         }
-      } catch (err) {
-        console.warn('Alankar upload error:', err);
-        cloudOk = false;
+      } else {
+        failCount++;
       }
     }
 
@@ -3439,11 +3723,14 @@ async function submitAlankarForm(ev) {
     render();
     hideLoader();
     closeModal();
+    alankarSelectedVideos = [];
 
-    if (cloudOk) {
-      toast('✅ मुखदर्शन व्हिडिओ यशस्वीरीत्या जतन झाला! (Video saved successfully)');
+    if (failCount === 0) {
+      toast(`✅ मुखदर्शन व्हिडिओ यशस्वीरीत्या जतन झाले! (${successCount} video(s) saved successfully)`);
+    } else if (successCount === 0) {
+      toast(`⚠️ व्हिडिओ क्लाउडवर सेव्ह होऊ शकले नाहीत. (${failCount} failed)`);
     } else {
-      toast('⚠️ व्हिडिओ स्थानिक सेव्ह झाला, पण क्लाउड सिंक होऊ शकला नाही. (Cloud sync error)');
+      toast(`⚠️ ${successCount} व्हिडिओ सेव्ह झाले, ${failCount} फेल — Check connection.`);
     }
     return;
   }
@@ -3474,32 +3761,16 @@ async function submitAlankarForm(ev) {
     db.alankar.unshift(item);
     save();
 
-    if (cloud) {
-      try {
-        let payload = toCloud('alankar', item);
-        let { data, error } = await cloud.from('alankar').upsert(payload, { onConflict: 'id' }).select().single();
-        if (error) {
-          console.warn('Alankar cloud sync error:', error);
-          failCount++;
-        } else {
-          // Update local item with confirmed cloud data
-          if (data) {
-            let idx = db.alankar.findIndex(x => x.id === itemId);
-            if (idx >= 0) {
-              db.alankar[idx] = fromCloud('alankar', data);
-              // Restore title locally (not in DB) for display purposes
-              db.alankar[idx].title = title;
-              db.alankar[idx].type = 'photo';
-            }
-          }
-          successCount++;
-        }
-      } catch (err) {
-        console.warn('Alankar upload error:', err);
-        failCount++;
+    let res = await syncAlankarItemToCloud(item);
+    if (res.ok) {
+      successCount++;
+      let localIdx = db.alankar.findIndex(x => x.id === itemId);
+      if (localIdx >= 0 && res.data) {
+        db.alankar[localIdx].title = title;
+        db.alankar[localIdx].type = 'photo';
       }
     } else {
-      successCount++;
+      failCount++;
     }
   }
 
@@ -3507,6 +3778,7 @@ async function submitAlankarForm(ev) {
   render();
   hideLoader();
   closeModal();
+  alankarSelectedPhotos = [];
 
   if (failCount === 0) {
     toast(`✅ मुखदर्शन फोटो यशस्वीरीत्या जतन झाले! (${successCount} photo(s) saved successfully)`);
@@ -3528,6 +3800,7 @@ window.onAlankarPhotoSelected = onAlankarPhotoSelected;
 window.removeAlankarPhoto = removeAlankarPhoto;
 window.triggerAlankarVideoCamera = triggerAlankarVideoCamera;
 window.triggerAlankarVideoGallery = triggerAlankarVideoGallery;
+window.onAlankarVideoSelected = onAlankarVideoSelected;
 window.removeAlankarVideo = removeAlankarVideo;
 
 /* One-Click Executive Audit Report Bundle Generator */

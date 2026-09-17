@@ -1328,6 +1328,74 @@ body {
   line-height: 1;
 }
 
+/* Multi-Video Preview List & Compression Chips */
+.video-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fffdfa;
+  border: 1px solid #ebdcd0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-top: 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.video-preview-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #2b1712;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.video-preview-thumb video,
+.video-preview-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-preview-info {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.video-preview-name {
+  font-weight: 700;
+  color: #2c1b18;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.video-preview-meta {
+  color: #7a5c50;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.video-chip-compress {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
 /* Public Mobile Responsive Adjustments */
 @media (max-width: 600px) {
   .public-container { padding: 10px 8px 30px; }
