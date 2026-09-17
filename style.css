@@ -2116,3 +2116,24 @@ body {
   transform: none;
 }
 
+/* Animated Count-Up Statistics */
+[data-count-target] {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.stat-counting {
+  will-change: transform;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-count-target] {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+

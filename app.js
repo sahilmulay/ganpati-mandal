@@ -1152,6 +1152,7 @@ function render() {
       target.innerHTML = publicView();
       updatePublicVisitorBadge(currentMandal.slug);
       setupPublicIntersectionObservers();
+      runPublicCountUpAnimation();
     }
     return;
   }
@@ -1754,22 +1755,22 @@ function publicView() {
           <span class="last-year-icon">💰</span>
           <span>मागील वर्षाची शिल्लक रक्कम (Last year remaining amount):</span>
         </div>
-        <div class="last-year-balance-amt">₹21,400/-</div>
+        <div class="last-year-balance-amt" data-count-target="21400" data-prefix="₹" data-suffix="/-">₹21,400/-</div>
       </div>
 
       <!-- Section 1: Financial Summary Cards (On Top) -->
       <section class="stats" style="margin-bottom:20px;">
         <div class="stat-card income">
           <div class="stat-head"><span class="stat-title"><b>एकूण जमा (Total Collection)</b></span><span class="stat-icon">↗</span></div>
-          <div class="money">${rupees(inc)}</div>
+          <div class="money" data-count-target="${inc}" data-prefix="₹">${rupees(inc)}</div>
         </div>
         <div class="stat-card expense">
           <div class="stat-head"><span class="stat-title"><b>एकूण खर्च (Total Expenses)</b></span><span class="stat-icon">↘</span></div>
-          <div class="money">${rupees(exp)}</div>
+          <div class="money" data-count-target="${exp}" data-prefix="₹">${rupees(exp)}</div>
         </div>
         <div class="stat-card balance">
           <div class="stat-head"><span class="stat-title"><b>शिल्लक (Net Balance)</b></span><span class="stat-icon">◈</span></div>
-          <div class="money">${rupees(bal)}</div>
+          <div class="money" data-count-target="${bal}" data-prefix="₹">${rupees(bal)}</div>
         </div>
       </section>
 
@@ -1808,7 +1809,7 @@ function publicView() {
         <div class="card">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3>
-            <span style="font-size:12px; color:#8b261e; font-weight:700;">एकूण: ${sortedDonations.length}</span>
+            <span id="publicDonationCountBadge" style="font-size:12px; color:#8b261e; font-weight:700;" data-count-target="${sortedDonations.length}" data-prefix="एकूण: ">एकूण: ${sortedDonations.length}</span>
           </div>
           <div style="margin:10px 0 12px 0;">
             <input id="publicDonationSearch" type="search" class="search" placeholder="🔍 देणगीदार किंवा रक्कम शोधा (Search by name or amount e.g. 500, Rahul)…" oninput="filterPublicDonations(this)" style="width:100%; box-sizing:border-box; padding:10px 14px; border:1px solid #e0cdc0; border-radius:10px; font-size:13px; background:#fffdfa;">
@@ -1906,6 +1907,103 @@ function publicView() {
       </footer>
     </div>
   `;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════
+   ANIMATED COUNT-UP STATISTICS (60FPS requestAnimationFrame + easeOutCubic)
+   ════════════════════════════════════════════════════════════════════════════════ */
+
+let _countUpTriggered = false;
+
+function formatIndianNumber(val) {
+  try {
+    return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(val);
+  } catch (e) {
+    let isNeg = val < 0;
+    let s = Math.round(Math.abs(val)).toString();
+    let lastThree = s.slice(-3);
+    let otherNumbers = s.slice(0, -3);
+    if (otherNumbers !== '') lastThree = ',' + lastThree;
+    return (isNeg ? '-' : '') + otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
+  }
+}
+
+function formatCountValue(val, prefix = '', suffix = '') {
+  let num = Math.round(Number(val)) || 0;
+  let isNeg = num < 0;
+  let formatted = formatIndianNumber(Math.abs(num));
+  return (isNeg ? '-' : '') + prefix + formatted + suffix;
+}
+
+function runPublicCountUpAnimation() {
+  if (_countUpTriggered) return;
+  _countUpTriggered = true;
+
+  let elements = document.querySelectorAll('[data-count-target]');
+  if (!elements.length) return;
+
+  // Accessibility: prefers-reduced-motion check
+  let prefersReduced = false;
+  try {
+    prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch(e) {}
+
+  if (prefersReduced) {
+    elements.forEach(el => {
+      let target = Number(el.getAttribute('data-count-target')) || 0;
+      let prefix = el.getAttribute('data-prefix') || '';
+      let suffix = el.getAttribute('data-suffix') || '';
+      el.textContent = formatCountValue(target, prefix, suffix);
+    });
+    return;
+  }
+
+  let duration = 1200; // 1200ms
+  let startTime = null;
+
+  // Set initial display to 0 and apply scale 0.98
+  elements.forEach(el => {
+    let prefix = el.getAttribute('data-prefix') || '';
+    let suffix = el.getAttribute('data-suffix') || '';
+    el.textContent = formatCountValue(0, prefix, suffix);
+    el.classList.add('stat-counting');
+    el.style.transform = 'scale(0.98)';
+  });
+
+  function step(timestamp) {
+    if (!startTime) startTime = timestamp;
+    let elapsed = timestamp - startTime;
+    let progress = Math.min(elapsed / duration, 1);
+
+    // easeOutCubic easing: 1 - (1 - t)^3
+    let ease = 1 - Math.pow(1 - progress, 3);
+    let currentScale = 0.98 + (0.02 * ease);
+
+    elements.forEach(el => {
+      let target = Number(el.getAttribute('data-count-target')) || 0;
+      let prefix = el.getAttribute('data-prefix') || '';
+      let suffix = el.getAttribute('data-suffix') || '';
+      let currentVal = Math.round(target * ease);
+      el.textContent = formatCountValue(currentVal, prefix, suffix);
+      el.style.transform = `scale(${currentScale.toFixed(4)})`;
+    });
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      // Final frame: lock exact target values and remove scale/active classes
+      elements.forEach(el => {
+        let target = Number(el.getAttribute('data-count-target')) || 0;
+        let prefix = el.getAttribute('data-prefix') || '';
+        let suffix = el.getAttribute('data-suffix') || '';
+        el.textContent = formatCountValue(target, prefix, suffix);
+        el.classList.remove('stat-counting');
+        el.style.transform = '';
+      });
+    }
+  }
+
+  requestAnimationFrame(step);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════════
@@ -4829,6 +4927,7 @@ function publicPortalLanding() {
 }
 
 async function loadPublicMandalData() {
+  _countUpTriggered = false;
   let params = new URLSearchParams(window.location.search);
   let slug = params.get('mandal');
   if (!slug) {
