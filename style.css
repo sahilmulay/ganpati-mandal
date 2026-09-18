@@ -2205,3 +2205,143 @@ body {
   }
 }
 
+/* ── Storage Migration Status Card (Phase 1 Infrastructure) ─────────────── */
+.migration-status-card {
+  border: 1px solid #eedecf !important;
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 20px rgba(159, 46, 32, 0.05);
+  padding: 20px !important;
+}
+
+.migration-phase-badge {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.migration-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.mig-stat-box {
+  background: #fdf8f5;
+  border: 1px solid #f0ddd0;
+  border-radius: 12px;
+  padding: 14px 10px;
+  text-align: center;
+}
+
+.mig-stat-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: #2c1b18;
+  line-height: 1.2;
+}
+
+.mig-stat-val.text-success {
+  color: #059669;
+}
+
+.mig-stat-val.text-warning {
+  color: #d97706;
+}
+
+.mig-stat-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8c6050;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 4px;
+}
+
+.migration-info-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  background: #faf6f2;
+  border: 1px solid #eedecf;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.mig-info-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mig-info-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7d4030;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mig-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mig-chip {
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mig-status-text {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.migration-footer-note {
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  color: #92400e;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .migration-stats-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .mig-stat-box {
+    padding: 10px 6px;
+  }
+  .mig-stat-val {
+    font-size: 18px;
+  }
+  .mig-stat-lbl {
+    font-size: 9.5px;
+  }
+  .migration-info-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+

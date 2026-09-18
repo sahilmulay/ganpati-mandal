@@ -333,6 +333,104 @@ function hasValidImage(img) {
   return true;
 }
 
+/* ── Universal Media Source Resolvers (Phase 1 Compatibility Layer) ───────── */
+function getMediaSrc(item) {
+  if (!item) return '';
+  if (item.storage_migrated && item.media_url) {
+    return item.media_url;
+  }
+  return item.image || '';
+}
+
+function hasMedia(item) {
+  if (!item) return false;
+  return Boolean(
+    (item.storage_migrated && item.media_url) ||
+    (item.image && hasValidImage(item.image))
+  );
+}
+
+/* ── Phase 2 Storage Migration Utilities (Dormant / Unexecuted in Phase 1) ── */
+function detectMimeType(dataUrlOrBase64, fallbackType) {
+  if (!dataUrlOrBase64 || typeof dataUrlOrBase64 !== 'string') {
+    return fallbackType === 'video' ? 'video/mp4' : 'image/jpeg';
+  }
+  let match = dataUrlOrBase64.match(/^data:([^;]+);base64,/i);
+  if (match && match[1]) return match[1].toLowerCase();
+
+  let clean = dataUrlOrBase64.replace(/^data:[^,]+,/, '').trim();
+  if (clean.startsWith('/9j/')) return 'image/jpeg';
+  if (clean.startsWith('iVBORw0KGgo')) return 'image/png';
+  if (clean.startsWith('UklGR')) return 'image/webp';
+  if (clean.startsWith('R0lGOD')) return 'image/gif';
+  if (clean.startsWith('AAAA') || clean.slice(0, 100).includes('ftyp')) return 'video/mp4';
+
+  return fallbackType === 'video' ? 'video/mp4' : 'image/jpeg';
+}
+
+function convertBase64ToBlob(base64String, forcedMime) {
+  if (!base64String) return null;
+  let mime = forcedMime || detectMimeType(base64String);
+  let b64Data = base64String;
+  let commaIdx = base64String.indexOf(',');
+  if (commaIdx !== -1 && base64String.slice(0, commaIdx).includes('base64')) {
+    b64Data = base64String.slice(commaIdx + 1);
+  }
+  b64Data = b64Data.trim().replace(/[\r\n\s]+/g, '');
+  let binary = atob(b64Data);
+  let len = binary.length;
+  let u8arr = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    u8arr[i] = binary.charCodeAt(i);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+function getStorageBucket(type, mimeType) {
+  let mime = (mimeType || '').toLowerCase();
+  if (type === 'video' || mime.startsWith('video/')) {
+    return 'alankar-videos';
+  }
+  return 'alankar-images';
+}
+
+function generateStoragePath(mandalSlugOrId, id, type, mimeType) {
+  let mandal = (mandalSlugOrId || currentMandal.slug || 'vrindavan').toString().trim().toLowerCase();
+  let isVid = type === 'video' || (mimeType && mimeType.startsWith('video/'));
+  let folder = isVid ? 'videos' : 'photos';
+  let ext = 'jpg';
+  if (isVid) {
+    if (mimeType === 'video/webm') ext = 'webm';
+    else if (mimeType === 'video/quicktime') ext = 'mov';
+    else ext = 'mp4';
+  } else {
+    if (mimeType === 'image/png') ext = 'png';
+    else if (mimeType === 'image/webp') ext = 'webp';
+    else if (mimeType === 'image/gif') ext = 'gif';
+    else ext = 'jpg';
+  }
+  let cleanId = (id || ('item_' + Date.now())).toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${mandal}/${folder}/${cleanId}.${ext}`;
+}
+
+async function uploadMediaToStorage(fileOrBlob, bucket, path, mimeType) {
+  if (!cloud) throw new Error('Supabase client not initialized');
+  let mime = mimeType || fileOrBlob.type || 'application/octet-stream';
+  let { data, error } = await cloud.storage.from(bucket).upload(path, fileOrBlob, {
+    contentType: mime,
+    upsert: true
+  });
+  if (error) throw error;
+  let { data: pubData } = cloud.storage.from(bucket).getPublicUrl(path);
+  return {
+    ok: true,
+    path: path,
+    bucket: bucket,
+    media_url: pubData?.publicUrl || '',
+    upload_response: data
+  };
+}
+
 const rupees = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 const today = new Date().toISOString().slice(0, 10);
 
@@ -456,7 +554,7 @@ const tableColumns = {
   event:    'id,title,date,description,mandal_id,created_at',                  // Omits image_url on list
   contact:  'id,name,role,phone,mandal_id,created_at',
   document: 'id,mandal_id,title,category,icon,outward_no,issued_by,valid_from,valid_until,status,note,created_at', // Omits heavy Base64 image
-  alankar:  'id,mandal_id,date,type,note,created_at'                            // Metadata only!
+  alankar:  'id,mandal_id,date,type,note,created_at,media_url,storage_path,storage_migrated,mime_type' // Metadata only! (Zero Base64)
 };
 
 /* Performance Telemetry */
@@ -642,8 +740,23 @@ function fromCloud(type, row) {
     } else {
       parsedTitle = rawNote; // fallback: use note as title if no separator
     }
-    let mediaType = row.type || (isVideoData(img) ? 'video' : 'photo');
-    return { ...row, image: img, image_url: img, title: parsedTitle, note: parsedNote, type: mediaType };
+    let mediaUrl = row.media_url || '';
+    let storagePath = row.storage_path || '';
+    let storageMigrated = Boolean(row.storage_migrated);
+    let mimeType = row.mime_type || '';
+    let mediaType = row.type || (mimeType.startsWith('video/') ? 'video' : (isVideoData(img) ? 'video' : 'photo'));
+    return {
+      ...row,
+      image: img,
+      image_url: img,
+      media_url: mediaUrl,
+      storage_path: storagePath,
+      storage_migrated: storageMigrated,
+      mime_type: mimeType,
+      title: parsedTitle,
+      note: parsedNote,
+      type: mediaType
+    };
   }
   return row;
 }
@@ -715,7 +828,7 @@ function toCloud(type, row) {
   }
 
   if (type === 'alankar') {
-    return {
+    let out = {
       id: row.id,
       date: row.date || today,
       type: row.type || (isVideoData(img) ? 'video' : 'photo'),
@@ -723,6 +836,11 @@ function toCloud(type, row) {
       image: img,
       mandal_id: mandalId
     };
+    if (row.media_url) out.media_url = row.media_url;
+    if (row.storage_path) out.storage_path = row.storage_path;
+    if (row.storage_migrated && row.media_url) out.storage_migrated = Boolean(row.storage_migrated);
+    if (row.mime_type) out.mime_type = row.mime_type;
+    return out;
   }
 
   if (type === 'document') {
@@ -880,7 +998,7 @@ async function loadCloud(force = false) {
   } else {
     // Dashboard & Reports
     priorityTables = ['donation', 'expense', 'aarti', 'event', 'contact'];
-    secondaryTables = ['document'];
+    secondaryTables = ['document', 'alankar'];
   }
 
   async function fetchTable(type) {
@@ -888,6 +1006,14 @@ async function loadCloud(force = false) {
     try {
       let cols = tableColumns[type] || '*';
       let { data, error } = await cloud.from(tableName[type]).select(cols).eq('mandal_id', currentMandal.id);
+      if (error && type === 'alankar' && (error.code === '42703' || error.message?.includes('media_url'))) {
+        // Fallback for alankar before SQL migration is executed in Supabase
+        let fallbackRes = await cloud.from('alankar').select('id,mandal_id,date,type,note,created_at').eq('mandal_id', currentMandal.id);
+        if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
+          data = fallbackRes.data;
+          error = null;
+        }
+      }
       if (error) {
         if (error.code === 'PGRST205') return false;
         console.warn(`Supabase ${type} fetch error:`, error.message);
@@ -1488,7 +1614,7 @@ let _documentsLoading = false;
 
 function renderPublicGalleryHtml() {
   let alankars = sortByNewest(db.alankar || []);
-  let galleryItems = alankars.filter(a => hasValidImage(a.image));
+  let galleryItems = alankars.filter(a => hasMedia(a));
 
   if ((_alankarLoading || _galleryLoading) && !galleryItems.length) {
     return `
@@ -1528,8 +1654,8 @@ function renderPublicGalleryHtml() {
 
   let dayCardsHtml = dayEntries.map(([dateKey, items], dayIndex) => {
     let isExtra = dayIndex >= 2;
-    let photoCount = items.filter(x => !(x.type === 'video' || isVideoData(x.image))).length;
-    let videoCount = items.filter(x => x.type === 'video' || isVideoData(x.image)).length;
+    let photoCount = items.filter(x => !(x.type === 'video' || (x.mime_type && x.mime_type.startsWith('video/')) || isVideoData(getMediaSrc(x)))).length;
+    let videoCount = items.filter(x => x.type === 'video' || (x.mime_type && x.mime_type.startsWith('video/')) || isVideoData(getMediaSrc(x))).length;
     let countBadge = [];
     if (photoCount > 0) countBadge.push(`${photoCount} फोटो`);
     if (videoCount > 0) countBadge.push(`${videoCount} व्हिडिओ`);
@@ -1541,17 +1667,18 @@ function renderPublicGalleryHtml() {
 
     let tilesHtml = visibleItems.map((item, i) => {
       let globalIdx = galleryItems.indexOf(item);
-      let isVid = item.type === 'video' || isVideoData(item.image);
+      let src = getMediaSrc(item);
+      let isVid = item.type === 'video' || (item.mime_type && item.mime_type.startsWith('video/')) || isVideoData(src);
       let isLastBlock = (i === 3 && remainingCount > 0);
 
       return `
         <div class="wa-collage-item" onclick="openGallery(${globalIdx})">
           ${isVid ? `
-            <video src="${escapeHtml(item.image)}#t=0.5" preload="metadata" muted playsinline></video>
+            <video src="${escapeHtml(src)}#t=0.5" preload="metadata" muted playsinline></video>
             <div class="wa-play-btn"><div class="wa-play-icon">▶</div></div>
             <span class="wa-badge-hd">HD</span>
           ` : `
-            <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy">
+            <img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" loading="lazy">
           `}
           ${isLastBlock ? `<div class="wa-collage-overlay">+${remainingCount}</div>` : ''}
         </div>
@@ -1559,9 +1686,10 @@ function renderPublicGalleryHtml() {
     }).join('');
 
     let firstItem = items[0];
+    let firstSrc = getMediaSrc(firstItem);
     let caption = firstItem.title || dateLabelInMarathi(dateKey);
     let firstGlobalIdx = galleryItems.indexOf(firstItem);
-    let isVidFirst = firstItem.type === 'video' || isVideoData(firstItem.image);
+    let isVidFirst = firstItem.type === 'video' || (firstItem.mime_type && firstItem.mime_type.startsWith('video/')) || isVideoData(firstSrc);
     let ext = isVidFirst ? 'mp4' : 'jpg';
     let safeTitle = (firstItem.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
     let filename = `bappa_${safeTitle}_${dateKey || today}.${ext}`;
@@ -1584,7 +1712,7 @@ function renderPublicGalleryHtml() {
               ${escapeHtml(caption)}
             </div>
             <div class="wa-collage-actions">
-              <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(firstItem.image)}', '${escapeHtml(filename)}')" title="Download">
+              <button class="card-download-btn" onclick="event.stopPropagation(); downloadMedia('${escapeHtml(firstSrc)}', '${escapeHtml(filename)}')" title="Download">
                 ⬇️ Download
               </button>
               <button class="wa-view-all-btn" onclick="openGallery(${firstGlobalIdx})" title="View all photos">
@@ -2059,19 +2187,37 @@ async function fetchLazyGallery() {
 
     // Step 1: Fetch gallery metadata ONLY (NO heavy Base64 images! ~4KB)
     let meta = [];
+    let alankarCols = tableColumns.alankar || 'id,mandal_id,date,type,note,created_at,media_url,storage_path,storage_migrated,mime_type';
+    let baseCols = 'id,mandal_id,date,type,note,created_at';
     if (cloud) {
       let { data, error } = await cloud
         .from('alankar')
-        .select('id,mandal_id,date,type,note,created_at')
+        .select(alankarCols)
         .eq('mandal_id', currentMandal.id)
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
-      if (!error && Array.isArray(data)) meta = data;
+      if (error && (error.code === '42703' || error.message?.includes('media_url'))) {
+        let fbRes = await cloud
+          .from('alankar')
+          .select(baseCols)
+          .eq('mandal_id', currentMandal.id)
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false });
+        if (!fbRes.error && Array.isArray(fbRes.data)) meta = fbRes.data;
+      } else if (!error && Array.isArray(data)) {
+        meta = data;
+      }
     } else {
-      let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar?select=id,mandal_id,date,type,note,created_at&mandal_id=eq.${encodeURIComponent(currentMandal.id)}&order=date.desc,created_at.desc`, { headers: restHeaders });
+      let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar?select=${encodeURIComponent(alankarCols)}&mandal_id=eq.${encodeURIComponent(currentMandal.id)}&order=date.desc,created_at.desc`, { headers: restHeaders });
       if (res.ok) {
         let rows = await res.json();
         if (Array.isArray(rows)) meta = rows;
+      } else {
+        let fbRes = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar?select=${encodeURIComponent(baseCols)}&mandal_id=eq.${encodeURIComponent(currentMandal.id)}&order=date.desc,created_at.desc`, { headers: restHeaders });
+        if (fbRes.ok) {
+          let rows = await fbRes.json();
+          if (Array.isArray(rows)) meta = rows;
+        }
       }
     }
 
@@ -2102,37 +2248,43 @@ async function fetchLazyGallery() {
 async function loadGalleryImageBatch(startIndex, count) {
   let slice = _allAlankarMeta.slice(startIndex, startIndex + count);
   if (!slice.length) return;
-  let ids = slice.map(x => x.id);
+  // Fetch Base64 'image' ONLY for items that have not yet been migrated to Storage
+  let pendingItems = slice.filter(x => !(x.storage_migrated && x.media_url));
+  let ids = pendingItems.map(x => x.id);
   let t0 = Date.now();
   let imgMap = new Map();
-  try {
-    let restHeaders = {
-      'apikey': CLOUD_CONFIG.publishableKey,
-      'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey
-    };
-    if (cloud) {
-      let { data, error } = await cloud.from('alankar').select('id,image').in('id', ids);
-      if (!error && Array.isArray(data)) {
-        data.forEach(r => imgMap.set(String(r.id), r.image));
+  if (ids.length) {
+    try {
+      let restHeaders = {
+        'apikey': CLOUD_CONFIG.publishableKey,
+        'Authorization': 'Bearer ' + CLOUD_CONFIG.publishableKey
+      };
+      if (cloud) {
+        let { data, error } = await cloud.from('alankar').select('id,image').in('id', ids);
+        if (!error && Array.isArray(data)) {
+          data.forEach(r => imgMap.set(String(r.id), r.image));
+        }
+      } else {
+        let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar?select=id,image&id=in.(${ids.map(encodeURIComponent).join(',')})`, { headers: restHeaders });
+        if (res.ok) {
+          let rows = await res.json();
+          if (Array.isArray(rows)) rows.forEach(r => imgMap.set(String(r.id), r.image));
+        }
       }
-    } else {
-      let res = await fetch(`${CLOUD_CONFIG.url}/rest/v1/alankar?select=id,image&id=in.(${ids.map(encodeURIComponent).join(',')})`, { headers: restHeaders });
-      if (res.ok) {
-        let rows = await res.json();
-        if (Array.isArray(rows)) rows.forEach(r => imgMap.set(String(r.id), r.image));
-      }
+      let dur = Date.now() - t0;
+      let bytes = Array.from(imgMap.values()).reduce((s, img) => s + (img ? img.length : 0), 0);
+      logPerfMetric(`Gallery Image Batch [${startIndex}..${startIndex + count}]`, dur, imgMap.size, bytes);
+    } catch(e) {
+      console.warn('Gallery image batch fetch error:', e);
     }
-    let dur = Date.now() - t0;
-    let bytes = Array.from(imgMap.values()).reduce((s, img) => s + (img ? img.length : 0), 0);
-    logPerfMetric(`Gallery Image Batch [${startIndex}..${startIndex + count}]`, dur, imgMap.size, bytes);
-  } catch(e) {
-    console.warn('Gallery image batch fetch error:', e);
   }
 
   slice.forEach(item => {
-    let img = imgMap.get(String(item.id)) || '';
-    item.image = img;
-    item.image_url = img;
+    if (!item.storage_migrated || !item.media_url) {
+      let img = imgMap.get(String(item.id)) || item.image || '';
+      item.image = img;
+      item.image_url = img;
+    }
   });
 
   _alankarLoadedCount = Math.min(_allAlankarMeta.length, startIndex + count);
@@ -2460,7 +2612,7 @@ let _galleryItems = [];
 let _galleryIdx   = 0;
 
 function openGallery(idx) {
-  _galleryItems = sortByNewest((db.alankar || []).filter(a => hasValidImage(a.image)));
+  _galleryItems = sortByNewest((db.alankar || []).filter(a => hasMedia(a)));
   if (!_galleryItems.length) return;
   _galleryIdx = Math.max(0, Math.min(idx, _galleryItems.length - 1));
   _renderGalleryLightbox();
@@ -2471,8 +2623,9 @@ function _renderGalleryLightbox() {
   let total = _galleryItems.length;
   let hasPrev = _galleryIdx > 0;
   let hasNext = _galleryIdx < total - 1;
-  let isVid   = item.type === 'video' || isVideoData(item.image);
-  let isPdf   = isPdfData(item.image);
+  let src     = getMediaSrc(item);
+  let isVid   = item.type === 'video' || (item.mime_type && item.mime_type.startsWith('video/')) || isVideoData(src);
+  let isPdf   = isPdfData(src);
   let ext     = isVid ? 'mp4' : 'jpg';
   let safeTitle = (item.title || 'bappa_darshan').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
   let filename = `bappa_${safeTitle}_${item.date || today}.${ext}`;
@@ -2495,7 +2648,7 @@ function _renderGalleryLightbox() {
         <span class="gallery-lb-counter">${_galleryIdx + 1} / ${total}</span>
         <span class="gallery-lb-title">${escapeHtml(item.title)}</span>
         <div style="display:flex; align-items:center; gap:8px;">
-          <button class="gallery-lb-download" onclick="downloadMedia('${escapeHtml(item.image)}', '${escapeHtml(filename)}')" title="Download">
+          <button class="gallery-lb-download" onclick="downloadMedia('${escapeHtml(src)}', '${escapeHtml(filename)}')" title="Download">
             ⬇️ Download
           </button>
           <button class="gallery-lb-close" onclick="closeGallery()" aria-label="Close">✕</button>
@@ -2503,10 +2656,10 @@ function _renderGalleryLightbox() {
       </div>
       <div class="gallery-lb-stage" id="galleryStage">
         ${isPdf
-          ? `<div style="text-align:center;padding:40px 20px;color:#fff;"><div style="font-size:64px;">📄</div><p style="margin:12px 0 20px;">${escapeHtml(item.title)}</p><a href="${escapeHtml(item.image)}" target="_blank" class="primary-btn">Open PDF</a></div>`
+          ? `<div style="text-align:center;padding:40px 20px;color:#fff;"><div style="font-size:64px;">📄</div><p style="margin:12px 0 20px;">${escapeHtml(item.title)}</p><a href="${escapeHtml(src)}" target="_blank" class="primary-btn">Open PDF</a></div>`
           : (isVid
-            ? `<video class="gallery-lb-video" controls autoplay playsinline src="${escapeHtml(item.image)}"></video>`
-            : `<img class="gallery-lb-img" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" draggable="false">`
+            ? `<video class="gallery-lb-video" controls autoplay playsinline src="${escapeHtml(src)}"></video>`
+            : `<img class="gallery-lb-img" src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" draggable="false">`
           )}
       </div>
       <div class="gallery-lb-info">
@@ -2555,7 +2708,7 @@ function galleryNext() {
     _renderGalleryLightbox();
   } else if (_allAlankarMeta && _allAlankarMeta.length > _alankarLoadedCount) {
     loadGalleryImageBatch(_alankarLoadedCount, _alankarPageSize).then(() => {
-      _galleryItems = sortByNewest((db.alankar || []).filter(a => hasValidImage(a.image)));
+      _galleryItems = sortByNewest((db.alankar || []).filter(a => hasMedia(a)));
       if (_galleryIdx < _galleryItems.length - 1) {
         _galleryIdx++;
         _renderGalleryLightbox();
@@ -2645,8 +2798,68 @@ function dashboard() {
         </div>
         ${up.map(eventSmall).join('')}
       </div>
-    </section>`
+    </section>
+    ${renderStorageMigrationStatusCard()}`
   );
+}
+
+function renderStorageMigrationStatusCard() {
+  let alankarItems = db.alankar || [];
+  let total = alankarItems.length;
+  let migrated = alankarItems.filter(a => a.storage_migrated && a.media_url).length;
+  let remaining = total - migrated;
+
+  return `
+    <div class="card migration-status-card" style="margin-top:20px;">
+      <div class="card-title" style="margin-bottom:14px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:22px;">☁️</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:700; color:#7d1c12;">Storage Migration Status</h3>
+            <div style="font-size:11px; color:#8c6050;">Base64 Database → Supabase Storage (Infrastructure Readiness)</div>
+          </div>
+        </div>
+        <span class="migration-phase-badge">🟢 Phase 1 Ready</span>
+      </div>
+
+      <div class="migration-stats-grid">
+        <div class="mig-stat-box">
+          <div class="mig-stat-val">${total}</div>
+          <div class="mig-stat-lbl">Total Records</div>
+        </div>
+        <div class="mig-stat-box">
+          <div class="mig-stat-val text-success">${migrated}</div>
+          <div class="mig-stat-lbl">Migrated Records</div>
+        </div>
+        <div class="mig-stat-box">
+          <div class="mig-stat-val text-warning">${remaining}</div>
+          <div class="mig-stat-lbl">Remaining Records</div>
+        </div>
+      </div>
+
+      <div class="migration-info-row">
+        <div class="mig-info-col">
+          <span class="mig-info-title">Bucket Status</span>
+          <div class="mig-chips">
+            <span class="mig-chip">✅ alankar-images (10MB)</span>
+            <span class="mig-chip">✅ alankar-videos (50MB)</span>
+          </div>
+        </div>
+        <div class="mig-info-col">
+          <span class="mig-info-title">Current Phase</span>
+          <div class="mig-status-text">
+            <span style="color:#059669; font-weight:700;">🟢 Phase 1 Ready</span>
+            <span style="color:#6b7280;">•</span>
+            <span style="color:#b45309; font-weight:600;">⏳ Waiting for Phase 2 Migration</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="migration-footer-note">
+        🔒 <strong>Read-Only Mode:</strong> Media serves securely from existing Base64 records with zero modifications. Storage buckets and backward-compatible schemas are initialized and awaiting Phase 2 migration approval.
+      </div>
+    </div>
+  `;
 }
 
 function stat(label, icon, value, cl) {
@@ -3362,7 +3575,7 @@ async function syncAlankarItemToCloud(item) {
       let { data, error } = await cloud
         .from('alankar')
         .upsert(payload, { onConflict: 'id' })
-        .select('id,mandal_id,date,type,note,created_at')
+        .select(tableColumns.alankar || 'id,mandal_id,date,type,note,created_at,media_url,storage_path,storage_migrated,mime_type')
         .maybeSingle();
 
       if (!error && data) {
