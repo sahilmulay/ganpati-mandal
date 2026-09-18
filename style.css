@@ -2227,7 +2227,8 @@ body {
   gap: 4px;
 }
 
-.migration-phase-badge.phase-2a-done {
+.migration-phase-badge.phase-2a-done,
+.migration-phase-badge.phase-2b-done {
   background: #ecfdf5;
   color: #065f46;
   border-color: #34d399;
