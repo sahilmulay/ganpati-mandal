@@ -2227,6 +2227,13 @@ body {
   gap: 4px;
 }
 
+.migration-phase-badge.phase-2a-done {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.25);
+}
+
 .migration-stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
