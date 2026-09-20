@@ -1882,15 +1882,21 @@ function publicView() {
     ? 'वृंदावन मंडळ Photo Gallery'
     : `${currentMandal.name} Photo Gallery`;
 
-  let publicDonationUpiCount = sortedDonations.filter(d => (d.mode || '').toUpperCase().includes('UPI')).length;
-  let publicDonationCashCount = sortedDonations.length - publicDonationUpiCount;
+  let publicDonationUpi = sortedDonations.filter(d => (d.mode || '').toUpperCase().includes('UPI'));
+  let publicDonationCash = sortedDonations.filter(d => !(d.mode || '').toUpperCase().includes('UPI'));
+  let publicDonationUpiCount = publicDonationUpi.length;
+  let publicDonationCashCount = publicDonationCash.length;
+  let publicDonationUpiTotal = sum(publicDonationUpi);
+  let publicDonationCashTotal = sum(publicDonationCash);
+  let displayedPublicDonationTotal = publicDonationModeFilter === 'UPI' ? publicDonationUpiTotal : (publicDonationModeFilter === 'Cash' ? publicDonationCashTotal : inc);
+  let displayedPublicDonationLabel = publicDonationModeFilter === 'UPI' ? 'एकूण UPI जमा:' : (publicDonationModeFilter === 'Cash' ? 'एकूण रोख जमा:' : 'एकूण जमा:');
 
   let donationRows = sortedDonations.map((d, index) => {
     let isExtra = index >= 4;
     let isUpi = (d.mode || '').toUpperCase().includes('UPI');
     let modeVal = isUpi ? 'UPI' : 'Cash';
     return `
-      <tr class="${isExtra ? 'extra-donation-row' : ''}" data-mode="${modeVal}" style="${isExtra ? 'display:none;' : ''}">
+      <tr class="${isExtra ? 'extra-donation-row' : ''}" data-mode="${modeVal}" data-amount="${d.amount || 0}" style="${isExtra ? 'display:none;' : ''}">
         <td>${dateLabelInMarathi(d.date)}</td>
         <td><strong>${escapeHtml(d.name)}</strong></td>
         <td><span class="tag ${isUpi ? 'online' : 'cash'}">${escapeHtml(d.mode || modeVal)}</span></td>
@@ -1899,12 +1905,22 @@ function publicView() {
     `;
   }).join('');
 
-  let publicExpenseUpiCount = sortedExpenses.filter(e => {
+  let publicExpenseUpi = sortedExpenses.filter(e => {
     let m = (e.mode || '').toUpperCase();
     let p = (e.paidBy || '').toUpperCase();
     return m.includes('UPI') || p.includes('(UPI)');
-  }).length;
-  let publicExpenseCashCount = sortedExpenses.length - publicExpenseUpiCount;
+  });
+  let publicExpenseCash = sortedExpenses.filter(e => {
+    let m = (e.mode || '').toUpperCase();
+    let p = (e.paidBy || '').toUpperCase();
+    return !(m.includes('UPI') || p.includes('(UPI)'));
+  });
+  let publicExpenseUpiCount = publicExpenseUpi.length;
+  let publicExpenseCashCount = publicExpenseCash.length;
+  let publicExpenseUpiTotal = sum(publicExpenseUpi);
+  let publicExpenseCashTotal = sum(publicExpenseCash);
+  let displayedPublicExpenseTotal = publicExpenseModeFilter === 'UPI' ? publicExpenseUpiTotal : (publicExpenseModeFilter === 'Cash' ? publicExpenseCashTotal : exp);
+  let displayedPublicExpenseLabel = publicExpenseModeFilter === 'UPI' ? 'एकूण UPI खर्च:' : (publicExpenseModeFilter === 'Cash' ? 'एकूण रोख खर्च:' : 'एकूण खर्च:');
 
   let expenseRows = sortedExpenses.map((e, index) => {
     let isExtra = index >= 4;
@@ -1912,7 +1928,7 @@ function publicView() {
     let isUpi = (e.mode || '').toUpperCase().includes('UPI') || (e.paidBy || '').toUpperCase().includes('(UPI)');
     let modeVal = isUpi ? 'UPI' : 'Cash';
     return `
-      <tr class="${isExtra ? 'extra-expense-row' : ''}" data-mode="${modeVal}" style="${isExtra ? 'display:none;' : ''}">
+      <tr class="${isExtra ? 'extra-expense-row' : ''}" data-mode="${modeVal}" data-amount="${e.amount || 0}" style="${isExtra ? 'display:none;' : ''}">
         <td>${dateLabelInMarathi(e.date)}</td>
         <td>
           <strong>${escapeHtml(e.description)}</strong>
@@ -2039,6 +2055,10 @@ function publicView() {
                 <span class="mode-badge">${publicDonationCashCount}</span>
               </button>
             </div>
+            <div class="mode-total-pill ${publicDonationModeFilter !== 'all' ? publicDonationModeFilter.toLowerCase() : ''}" id="publicDonationTotalPill">
+              <span class="total-pill-label" id="publicDonationTotalPillLabel">${displayedPublicDonationLabel}</span>
+              <b class="total-pill-amount" id="publicDonationTotalPillAmt">${rupees(displayedPublicDonationTotal)}</b>
+            </div>
           </div>
           ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody id="publicDonationRows">${donationRows || '<tr><td colspan="4" class="empty">अद्याप देणगी नोंद नाही</td></tr>'}</tbody>`)}
           ${sortedDonations.length > 4 ? `
@@ -2068,6 +2088,10 @@ function publicView() {
                 <span>💵 रोख (Cash)</span>
                 <span class="mode-badge">${publicExpenseCashCount}</span>
               </button>
+            </div>
+            <div class="mode-total-pill ${publicExpenseModeFilter !== 'all' ? publicExpenseModeFilter.toLowerCase() : ''}" id="publicExpenseTotalPill">
+              <span class="total-pill-label" id="publicExpenseTotalPillLabel">${displayedPublicExpenseLabel}</span>
+              <b class="total-pill-amount" id="publicExpenseTotalPillAmt">${rupees(displayedPublicExpenseTotal)}</b>
             </div>
           </div>
           ${tableWrap(`<thead><tr><th>दिनांक</th><th>खर्च तपशील</th><th>रक्कम</th><th>बिल</th></tr></thead><tbody id="publicExpenseRows">${expenseRows || '<tr><td colspan="4" class="empty">अद्याप खर्च नोंद नाही</td></tr>'}</tbody>`)}
@@ -2695,12 +2719,21 @@ function filterPublicDonations(input) {
     if (existingNoMatch) existingNoMatch.remove();
     let badge = document.getElementById('publicDonationCountBadge');
     if (badge) badge.textContent = `एकूण: ${db.donations?.length || 0}`;
+    let pill = document.getElementById('publicDonationTotalPill');
+    let pillLabel = document.getElementById('publicDonationTotalPillLabel');
+    let pillAmt = document.getElementById('publicDonationTotalPillAmt');
+    if (pill) {
+      pill.classList.remove('upi', 'cash');
+      if (pillLabel) pillLabel.textContent = 'एकूण जमा:';
+      if (pillAmt) pillAmt.textContent = rupees(sum(db.donations || []));
+    }
     return;
   }
 
   // Actively searching or filtering: hide toggle button and search across ALL rows
   if (toggleWrap) toggleWrap.style.display = 'none';
   let matchCount = 0;
+  let visibleAmount = 0;
 
   rows.forEach(r => {
     let rMode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
@@ -2711,7 +2744,10 @@ function filterPublicDonations(input) {
 
     let isVisible = matchesMode && matchesSearch;
     r.style.display = isVisible ? '' : 'none';
-    if (isVisible) matchCount++;
+    if (isVisible) {
+      matchCount++;
+      visibleAmount += Number(r.getAttribute('data-amount') || 0);
+    }
   });
 
   let badge = document.getElementById('publicDonationCountBadge');
@@ -2719,6 +2755,23 @@ function filterPublicDonations(input) {
     if (publicDonationModeFilter === 'UPI') badge.textContent = `UPI: ${matchCount}`;
     else if (publicDonationModeFilter === 'Cash') badge.textContent = `रोख: ${matchCount}`;
     else badge.textContent = `एकूण: ${matchCount}`;
+  }
+
+  let pill = document.getElementById('publicDonationTotalPill');
+  let pillLabel = document.getElementById('publicDonationTotalPillLabel');
+  let pillAmt = document.getElementById('publicDonationTotalPillAmt');
+  if (pill) {
+    pill.classList.remove('upi', 'cash');
+    if (publicDonationModeFilter === 'UPI') {
+      pill.classList.add('upi');
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेली UPI जमा:' : 'एकूण UPI जमा:';
+    } else if (publicDonationModeFilter === 'Cash') {
+      pill.classList.add('cash');
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेली रोख जमा:' : 'एकूण रोख जमा:';
+    } else {
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेली एकूण जमा:' : 'एकूण जमा:';
+    }
+    if (pillAmt) pillAmt.textContent = rupees(visibleAmount);
   }
 
   if (matchCount === 0) {
@@ -2766,18 +2819,30 @@ function applyPublicExpenseFilters() {
     if (existingNoMatch) existingNoMatch.remove();
     let badge = document.getElementById('publicExpenseCountBadge');
     if (badge) badge.textContent = `एकूण: ${db.expenses?.length || 0}`;
+    let pill = document.getElementById('publicExpenseTotalPill');
+    let pillLabel = document.getElementById('publicExpenseTotalPillLabel');
+    let pillAmt = document.getElementById('publicExpenseTotalPillAmt');
+    if (pill) {
+      pill.classList.remove('upi', 'cash');
+      if (pillLabel) pillLabel.textContent = 'एकूण खर्च:';
+      if (pillAmt) pillAmt.textContent = rupees(sum(db.expenses || []));
+    }
     return;
   }
 
   // Actively filtering by UPI / Cash
   if (toggleWrap) toggleWrap.style.display = 'none';
   let matchCount = 0;
+  let visibleAmount = 0;
 
   rows.forEach(r => {
     let rMode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
     let matchesMode = (publicExpenseModeFilter === 'all' || rMode === publicExpenseModeFilter.toUpperCase());
     r.style.display = matchesMode ? '' : 'none';
-    if (matchesMode) matchCount++;
+    if (matchesMode) {
+      matchCount++;
+      visibleAmount += Number(r.getAttribute('data-amount') || 0);
+    }
   });
 
   let badge = document.getElementById('publicExpenseCountBadge');
@@ -2785,6 +2850,23 @@ function applyPublicExpenseFilters() {
     if (publicExpenseModeFilter === 'UPI') badge.textContent = `UPI: ${matchCount}`;
     else if (publicExpenseModeFilter === 'Cash') badge.textContent = `रोख: ${matchCount}`;
     else badge.textContent = `एकूण: ${matchCount}`;
+  }
+
+  let pill = document.getElementById('publicExpenseTotalPill');
+  let pillLabel = document.getElementById('publicExpenseTotalPillLabel');
+  let pillAmt = document.getElementById('publicExpenseTotalPillAmt');
+  if (pill) {
+    pill.classList.remove('upi', 'cash');
+    if (publicExpenseModeFilter === 'UPI') {
+      pill.classList.add('upi');
+      if (pillLabel) pillLabel.textContent = 'एकूण UPI खर्च:';
+    } else if (publicExpenseModeFilter === 'Cash') {
+      pill.classList.add('cash');
+      if (pillLabel) pillLabel.textContent = 'एकूण रोख खर्च:';
+    } else {
+      if (pillLabel) pillLabel.textContent = 'एकूण खर्च:';
+    }
+    if (pillAmt) pillAmt.textContent = rupees(visibleAmount);
   }
 
   if (matchCount === 0) {
@@ -3250,12 +3332,22 @@ function expenses() {
   let total = sum(list);
   let groups = cats.map(c => [c, sum(list.filter(x => x.category === c))]).filter(x => x[1]);
 
-  let upiCount = list.filter(e => {
+  let upiExpenses = list.filter(e => {
     let m = (e.mode || '').toUpperCase();
     let p = (e.paidBy || '').toUpperCase();
     return m.includes('UPI') || p.includes('(UPI)');
-  }).length;
-  let cashCount = list.length - upiCount;
+  });
+  let cashExpenses = list.filter(e => {
+    let m = (e.mode || '').toUpperCase();
+    let p = (e.paidBy || '').toUpperCase();
+    return !(m.includes('UPI') || p.includes('(UPI)'));
+  });
+  let upiCount = upiExpenses.length;
+  let cashCount = cashExpenses.length;
+  let upiTotal = sum(upiExpenses);
+  let cashTotal = sum(cashExpenses);
+  let displayedExpenseTotal = expenseModeFilter === 'UPI' ? upiTotal : (expenseModeFilter === 'Cash' ? cashTotal : total);
+  let displayedExpenseLabel = expenseModeFilter === 'UPI' ? 'एकूण UPI खर्च:' : (expenseModeFilter === 'Cash' ? 'एकूण रोख खर्च:' : 'एकूण खर्च:');
 
   let rows = list.map(e => {
     let hasBillAvailable = e.hasBill || hasValidImage(e.image);
@@ -3263,7 +3355,7 @@ function expenses() {
     let modeVal = isUpi ? 'UPI' : 'Cash';
     let isVisible = (expenseModeFilter === 'all' || modeVal.toUpperCase() === expenseModeFilter.toUpperCase());
     return `
-    <tr data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
+    <tr data-mode="${modeVal}" data-amount="${e.amount || 0}" style="${isVisible ? '' : 'display:none;'}">
       <td>${dateLabel(e.date)}</td>
       <td>
         <div class="trans-info">
@@ -3290,7 +3382,7 @@ function expenses() {
     let modeVal = isUpi ? 'UPI' : 'Cash';
     let isVisible = (expenseModeFilter === 'all' || modeVal.toUpperCase() === expenseModeFilter.toUpperCase());
     return `
-    <article class="expense-card" data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
+    <article class="expense-card" data-mode="${modeVal}" data-amount="${e.amount || 0}" style="${isVisible ? '' : 'display:none;'}">
       <div class="expense-card-main">
         <span class="expense-meta">${dateLabel(e.date)} · ${escapeHtml(e.category)}</span>
         <strong>${escapeHtml(e.description)}</strong>
@@ -3329,6 +3421,10 @@ function expenses() {
               <span class="mode-badge">${cashCount}</span>
             </button>
           </div>
+          <div class="mode-total-pill ${expenseModeFilter !== 'all' ? expenseModeFilter.toLowerCase() : ''}" id="expenseTotalPill">
+            <span class="total-pill-label" id="expenseTotalPillLabel">${displayedExpenseLabel}</span>
+            <b class="total-pill-amount" id="expenseTotalPillAmt">${rupees(displayedExpenseTotal)}</b>
+          </div>
         </div>
         <div class="desktop-expenses">
           ${rows ? tableWrap(`<thead><tr><th>Date</th><th>Expense details</th><th>Paid by</th><th>Amount</th><th>Bill Photo</th><th></th></tr></thead><tbody id="expenseRows">${rows}</tbody>`) : (_syncingCloud ? `
@@ -3359,8 +3455,8 @@ function expenses() {
           ` : '<div class="empty">No expenses recorded yet</div>')}
         </div>
         <div class="summary-row">
-          <span>Total Expenses</span>
-          <b>${rupees(total)}</b>
+          <span id="expenseSummaryLabel">${expenseModeFilter === 'UPI' ? 'Total Expenses (UPI)' : (expenseModeFilter === 'Cash' ? 'Total Expenses (Cash)' : 'Total Expenses')}</span>
+          <b id="expenseSummaryTotal">${rupees(displayedExpenseTotal)}</b>
         </div>
       </div>
       <div class="card">
@@ -3378,15 +3474,21 @@ function donations() {
   let total = sum(db.donations);
   let list = sortByNewest(db.donations);
 
-  let upiCount = list.filter(d => (d.mode || '').toUpperCase().includes('UPI')).length;
-  let cashCount = list.length - upiCount;
+  let upiDonations = list.filter(d => (d.mode || '').toUpperCase().includes('UPI'));
+  let cashDonations = list.filter(d => !(d.mode || '').toUpperCase().includes('UPI'));
+  let upiCount = upiDonations.length;
+  let cashCount = cashDonations.length;
+  let upiTotal = sum(upiDonations);
+  let cashTotal = sum(cashDonations);
+  let displayedDonationTotal = donationModeFilter === 'UPI' ? upiTotal : (donationModeFilter === 'Cash' ? cashTotal : total);
+  let displayedDonationLabel = donationModeFilter === 'UPI' ? 'एकूण UPI जमा:' : (donationModeFilter === 'Cash' ? 'एकूण रोख जमा:' : 'एकूण जमा:');
 
   let rows = list.map(d => {
     let isUpi = (d.mode || '').toUpperCase().includes('UPI');
     let modeVal = isUpi ? 'UPI' : 'Cash';
     let isVisible = (donationModeFilter === 'all' || modeVal.toUpperCase() === donationModeFilter.toUpperCase());
     return `
-    <tr data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
+    <tr data-mode="${modeVal}" data-amount="${d.amount || 0}" style="${isVisible ? '' : 'display:none;'}">
       <td>${dateLabel(d.date)}</td>
       <td>
         <strong>${escapeHtml(d.name)}</strong>
@@ -3407,7 +3509,7 @@ function donations() {
     let modeVal = isUpi ? 'UPI' : 'Cash';
     let isVisible = (donationModeFilter === 'all' || modeVal.toUpperCase() === donationModeFilter.toUpperCase());
     return `
-    <article class="donation-card" data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
+    <article class="donation-card" data-mode="${modeVal}" data-amount="${d.amount || 0}" style="${isVisible ? '' : 'display:none;'}">
       <div class="donation-card-info">
         <strong>${escapeHtml(d.name)}</strong>
         <span>${dateLabel(d.date)} · <span class="tag ${isUpi ? 'online' : 'cash'}">${escapeHtml(d.mode || modeVal)}</span>${d.phone ? ` · 📱 ${escapeHtml(d.phone)}` : ''}</span>
@@ -3458,6 +3560,10 @@ function donations() {
             <span>💵 रोख (Cash)</span>
             <span class="mode-badge">${cashCount}</span>
           </button>
+        </div>
+        <div class="mode-total-pill ${donationModeFilter !== 'all' ? donationModeFilter.toLowerCase() : ''}" id="donationTotalPill">
+          <span class="total-pill-label" id="donationTotalPillLabel">${displayedDonationLabel}</span>
+          <b class="total-pill-amount" id="donationTotalPillAmt">${rupees(displayedDonationTotal)}</b>
         </div>
       </div>
       <div class="desktop-donations">
@@ -5533,7 +5639,9 @@ function applyDonationFilters(inputEl) {
   let cleanQ = q.replace(/[,₹\s]/g, '');
 
   let matchCount = 0;
-  document.querySelectorAll('#donationRows tr:not(#donationNoMatch)').forEach(r => {
+  let visibleAmount = 0;
+  let rowEls = document.querySelectorAll('#donationRows tr:not(#donationNoMatch)');
+  rowEls.forEach(r => {
     let mode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
     let matchesMode = (donationModeFilter === 'all' || mode === donationModeFilter.toUpperCase());
     let text = (r.innerText || '').toLowerCase();
@@ -5541,7 +5649,10 @@ function applyDonationFilters(inputEl) {
     let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
     let isVisible = matchesMode && matchesSearch;
     r.style.display = isVisible ? '' : 'none';
-    if (isVisible) matchCount++;
+    if (isVisible) {
+      matchCount++;
+      visibleAmount += Number(r.getAttribute('data-amount') || 0);
+    }
   });
 
   let existingNoMatch = document.getElementById('donationNoMatch');
@@ -5562,7 +5673,9 @@ function applyDonationFilters(inputEl) {
   }
 
   let mobileMatchCount = 0;
-  document.querySelectorAll('.donation-mobile-list .donation-card').forEach(c => {
+  let mobileVisibleAmount = 0;
+  let cardEls = document.querySelectorAll('.donation-mobile-list .donation-card');
+  cardEls.forEach(c => {
     let mode = (c.getAttribute('data-mode') || 'Cash').toUpperCase();
     let matchesMode = (donationModeFilter === 'all' || mode === donationModeFilter.toUpperCase());
     let text = (c.innerText || '').toLowerCase();
@@ -5570,7 +5683,10 @@ function applyDonationFilters(inputEl) {
     let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
     let isVisible = matchesMode && matchesSearch;
     c.style.display = isVisible ? '' : 'none';
-    if (isVisible) mobileMatchCount++;
+    if (isVisible) {
+      mobileMatchCount++;
+      mobileVisibleAmount += Number(c.getAttribute('data-amount') || 0);
+    }
   });
 
   let mobileNoMatch = document.getElementById('donationMobileNoMatch');
@@ -5591,6 +5707,24 @@ function applyDonationFilters(inputEl) {
   } else if (mobileNoMatch) {
     mobileNoMatch.remove();
   }
+
+  let finalAmount = rowEls.length ? visibleAmount : mobileVisibleAmount;
+  let pill = document.getElementById('donationTotalPill');
+  let pillLabel = document.getElementById('donationTotalPillLabel');
+  let pillAmt = document.getElementById('donationTotalPillAmt');
+  if (pill) {
+    pill.classList.remove('upi', 'cash');
+    if (donationModeFilter === 'UPI') {
+      pill.classList.add('upi');
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेली UPI जमा:' : 'एकूण UPI जमा:';
+    } else if (donationModeFilter === 'Cash') {
+      pill.classList.add('cash');
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेली रोख जमा:' : 'एकूण रोख जमा:';
+    } else {
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेली एकूण जमा:' : 'एकूण जमा:';
+    }
+    if (pillAmt) pillAmt.textContent = rupees(finalAmount);
+  }
 }
 window.applyDonationFilters = applyDonationFilters;
 
@@ -5609,7 +5743,9 @@ function applyExpenseFilters(inputEl) {
   let cleanQ = q.replace(/[,₹\s]/g, '');
 
   let matchCount = 0;
-  document.querySelectorAll('#expenseRows tr:not(#expenseNoMatch)').forEach(r => {
+  let visibleAmount = 0;
+  let rowEls = document.querySelectorAll('#expenseRows tr:not(#expenseNoMatch)');
+  rowEls.forEach(r => {
     let mode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
     let matchesMode = (expenseModeFilter === 'all' || mode === expenseModeFilter.toUpperCase());
     let text = (r.innerText || '').toLowerCase();
@@ -5617,7 +5753,10 @@ function applyExpenseFilters(inputEl) {
     let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
     let isVisible = matchesMode && matchesSearch;
     r.style.display = isVisible ? '' : 'none';
-    if (isVisible) matchCount++;
+    if (isVisible) {
+      matchCount++;
+      visibleAmount += Number(r.getAttribute('data-amount') || 0);
+    }
   });
 
   let existingNoMatch = document.getElementById('expenseNoMatch');
@@ -5638,7 +5777,9 @@ function applyExpenseFilters(inputEl) {
   }
 
   let mobileMatchCount = 0;
-  document.querySelectorAll('.expense-mobile-list .expense-card').forEach(c => {
+  let mobileVisibleAmount = 0;
+  let cardEls = document.querySelectorAll('.expense-mobile-list .expense-card');
+  cardEls.forEach(c => {
     let mode = (c.getAttribute('data-mode') || 'Cash').toUpperCase();
     let matchesMode = (expenseModeFilter === 'all' || mode === expenseModeFilter.toUpperCase());
     let text = (c.innerText || '').toLowerCase();
@@ -5646,7 +5787,10 @@ function applyExpenseFilters(inputEl) {
     let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
     let isVisible = matchesMode && matchesSearch;
     c.style.display = isVisible ? '' : 'none';
-    if (isVisible) mobileMatchCount++;
+    if (isVisible) {
+      mobileMatchCount++;
+      mobileVisibleAmount += Number(c.getAttribute('data-amount') || 0);
+    }
   });
 
   let mobileNoMatch = document.getElementById('expenseMobileNoMatch');
@@ -5666,6 +5810,33 @@ function applyExpenseFilters(inputEl) {
     }
   } else if (mobileNoMatch) {
     mobileNoMatch.remove();
+  }
+
+  let finalAmount = rowEls.length ? visibleAmount : mobileVisibleAmount;
+  let pill = document.getElementById('expenseTotalPill');
+  let pillLabel = document.getElementById('expenseTotalPillLabel');
+  let pillAmt = document.getElementById('expenseTotalPillAmt');
+  if (pill) {
+    pill.classList.remove('upi', 'cash');
+    if (expenseModeFilter === 'UPI') {
+      pill.classList.add('upi');
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेला UPI खर्च:' : 'एकूण UPI खर्च:';
+    } else if (expenseModeFilter === 'Cash') {
+      pill.classList.add('cash');
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेला रोख खर्च:' : 'एकूण रोख खर्च:';
+    } else {
+      if (pillLabel) pillLabel.textContent = q ? 'शोधलेला एकूण खर्च:' : 'एकूण खर्च:';
+    }
+    if (pillAmt) pillAmt.textContent = rupees(finalAmount);
+  }
+
+  let sumLabel = document.getElementById('expenseSummaryLabel');
+  let sumTotal = document.getElementById('expenseSummaryTotal');
+  if (sumLabel) {
+    sumLabel.textContent = expenseModeFilter === 'UPI' ? 'Total Expenses (UPI)' : (expenseModeFilter === 'Cash' ? 'Total Expenses (Cash)' : 'Total Expenses');
+  }
+  if (sumTotal) {
+    sumTotal.textContent = rupees(finalAmount);
   }
 }
 window.applyExpenseFilters = applyExpenseFilters;
