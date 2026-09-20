@@ -1882,27 +1882,41 @@ function publicView() {
     ? 'वृंदावन मंडळ Photo Gallery'
     : `${currentMandal.name} Photo Gallery`;
 
+  let publicDonationUpiCount = sortedDonations.filter(d => (d.mode || '').toUpperCase().includes('UPI')).length;
+  let publicDonationCashCount = sortedDonations.length - publicDonationUpiCount;
+
   let donationRows = sortedDonations.map((d, index) => {
     let isExtra = index >= 4;
+    let isUpi = (d.mode || '').toUpperCase().includes('UPI');
+    let modeVal = isUpi ? 'UPI' : 'Cash';
     return `
-      <tr class="${isExtra ? 'extra-donation-row' : ''}" style="${isExtra ? 'display:none;' : ''}">
+      <tr class="${isExtra ? 'extra-donation-row' : ''}" data-mode="${modeVal}" style="${isExtra ? 'display:none;' : ''}">
         <td>${dateLabelInMarathi(d.date)}</td>
         <td><strong>${escapeHtml(d.name)}</strong></td>
-        <td><span class="tag morning">${escapeHtml(d.mode)}</span></td>
+        <td><span class="tag ${isUpi ? 'online' : 'cash'}">${escapeHtml(d.mode || modeVal)}</span></td>
         <td class="amount income-t">${rupees(d.amount)}</td>
       </tr>
     `;
   }).join('');
 
+  let publicExpenseUpiCount = sortedExpenses.filter(e => {
+    let m = (e.mode || '').toUpperCase();
+    let p = (e.paidBy || '').toUpperCase();
+    return m.includes('UPI') || p.includes('(UPI)');
+  }).length;
+  let publicExpenseCashCount = sortedExpenses.length - publicExpenseUpiCount;
+
   let expenseRows = sortedExpenses.map((e, index) => {
     let isExtra = index >= 4;
     let hasBillAvailable = e.hasBill || hasValidImage(e.image);
+    let isUpi = (e.mode || '').toUpperCase().includes('UPI') || (e.paidBy || '').toUpperCase().includes('(UPI)');
+    let modeVal = isUpi ? 'UPI' : 'Cash';
     return `
-      <tr class="${isExtra ? 'extra-expense-row' : ''}" style="${isExtra ? 'display:none;' : ''}">
+      <tr class="${isExtra ? 'extra-expense-row' : ''}" data-mode="${modeVal}" style="${isExtra ? 'display:none;' : ''}">
         <td>${dateLabelInMarathi(e.date)}</td>
         <td>
           <strong>${escapeHtml(e.description)}</strong>
-          <br><small class="muted">${escapeHtml(e.category)} • Paid by ${escapeHtml(e.paidBy)}</small>
+          <br><small class="muted">${escapeHtml(e.category)} • Paid by ${escapeHtml(e.paidBy || '')} • <span class="tag ${isUpi ? 'online' : 'cash'}" style="font-size:9.5px; font-weight:700;">${modeVal}</span></small>
         </td>
         <td class="amount expense-t">${rupees(e.amount)}</td>
         <td>${hasBillAvailable ? `<button class="text-link view-bill-btn" onclick="viewExpenseBill('${escapeHtml(e.id)}')">👁 Bill</button>` : '<span class="no-bill-badge">No bill available</span>'}</td>
@@ -2007,8 +2021,24 @@ function publicView() {
             <h3>₹ देणगी व वर्गणी सूची (Donation Ledger)</h3>
             <span id="publicDonationCountBadge" style="font-size:12px; color:#8b261e; font-weight:700;" data-count-target="${sortedDonations.length}" data-prefix="एकूण: ">एकूण: ${sortedDonations.length}</span>
           </div>
-          <div style="margin:10px 0 12px 0;">
+          <div style="margin:10px 0 8px 0;">
             <input id="publicDonationSearch" type="search" class="search" placeholder="🔍 देणगीदार किंवा रक्कम शोधा (Search by name or amount e.g. 500, Rahul)…" oninput="filterPublicDonations(this)" style="width:100%; box-sizing:border-box; padding:10px 14px; border:1px solid #e0cdc0; border-radius:10px; font-size:13px; background:#fffdfa;">
+          </div>
+          <div class="mode-filter-bar" style="margin-bottom:12px;">
+            <div class="mode-filter-group" id="publicDonationFilterGroup">
+              <button type="button" class="mode-filter-btn all-btn active" data-filter="all" onclick="setPublicDonationModeFilter('all')">
+                <span>सर्व (All)</span>
+                <span class="mode-badge">${sortedDonations.length}</span>
+              </button>
+              <button type="button" class="mode-filter-btn upi-btn" data-filter="UPI" onclick="setPublicDonationModeFilter('UPI')">
+                <span>📱 UPI</span>
+                <span class="mode-badge">${publicDonationUpiCount}</span>
+              </button>
+              <button type="button" class="mode-filter-btn cash-btn" data-filter="Cash" onclick="setPublicDonationModeFilter('Cash')">
+                <span>💵 रोख (Cash)</span>
+                <span class="mode-badge">${publicDonationCashCount}</span>
+              </button>
+            </div>
           </div>
           ${tableWrap(`<thead><tr><th>दिनांक</th><th>देणगीदार</th><th>प्रकार</th><th>रक्कम</th></tr></thead><tbody id="publicDonationRows">${donationRows || '<tr><td colspan="4" class="empty">अद्याप देणगी नोंद नाही</td></tr>'}</tbody>`)}
           ${sortedDonations.length > 4 ? `
@@ -2020,10 +2050,29 @@ function publicView() {
           ` : ''}
         </div>
         <div class="card">
-          <div class="card-title"><h3>💸 खर्च नोंदी व बिल माहिती (Expense Ledger)</h3></div>
-          ${tableWrap(`<thead><tr><th>दिनांक</th><th>खर्च तपशील</th><th>रक्कम</th><th>बिल</th></tr></thead><tbody>${expenseRows}</tbody>`)}
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <h3>💸 खर्च नोंदी व बिल माहिती (Expense Ledger)</h3>
+            <span id="publicExpenseCountBadge" style="font-size:12px; color:#8b261e; font-weight:700;" data-count-target="${sortedExpenses.length}" data-prefix="एकूण: ">एकूण: ${sortedExpenses.length}</span>
+          </div>
+          <div class="mode-filter-bar" style="margin:10px 0 12px 0;">
+            <div class="mode-filter-group" id="publicExpenseFilterGroup">
+              <button type="button" class="mode-filter-btn all-btn active" data-filter="all" onclick="setPublicExpenseModeFilter('all')">
+                <span>सर्व (All)</span>
+                <span class="mode-badge">${sortedExpenses.length}</span>
+              </button>
+              <button type="button" class="mode-filter-btn upi-btn" data-filter="UPI" onclick="setPublicExpenseModeFilter('UPI')">
+                <span>📱 UPI</span>
+                <span class="mode-badge">${publicExpenseUpiCount}</span>
+              </button>
+              <button type="button" class="mode-filter-btn cash-btn" data-filter="Cash" onclick="setPublicExpenseModeFilter('Cash')">
+                <span>💵 रोख (Cash)</span>
+                <span class="mode-badge">${publicExpenseCashCount}</span>
+              </button>
+            </div>
+          </div>
+          ${tableWrap(`<thead><tr><th>दिनांक</th><th>खर्च तपशील</th><th>रक्कम</th><th>बिल</th></tr></thead><tbody id="publicExpenseRows">${expenseRows || '<tr><td colspan="4" class="empty">अद्याप खर्च नोंद नाही</td></tr>'}</tbody>`)}
           ${sortedExpenses.length > 4 ? `
-            <div style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px dashed #e8d5c4;">
+            <div id="publicExpenseToggleWrap" style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px dashed #e8d5c4;">
               <button id="publicExpenseToggleBtn" class="text-link" style="font-weight:700; color:#8b261e; font-size:12px; cursor:pointer;" onclick="togglePublicExpenses()">
                 ▼ View all expenses (सर्व खर्च पहा - ${sortedExpenses.length})
               </button>
@@ -2610,15 +2659,32 @@ function togglePublicAartis() {
   btn.textContent = isHidden ? '▲ View less (कमी दाखवा)' : '▼ View all 7 days aarti (सर्व ७ दिवसांचे वेळापत्रक पहा)';
 }
 
+let publicDonationModeFilter = 'all';
+let publicExpenseModeFilter = 'all';
+let donationModeFilter = 'all';
+let expenseModeFilter = 'all';
+
+function setPublicDonationModeFilter(mode) {
+  publicDonationModeFilter = mode;
+  document.querySelectorAll('#publicDonationFilterGroup .mode-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === mode);
+  });
+  let searchInput = document.getElementById('publicDonationSearch');
+  filterPublicDonations(searchInput || { value: '' });
+}
+window.setPublicDonationModeFilter = setPublicDonationModeFilter;
+
 function filterPublicDonations(input) {
-  let q = (input.value || '').toLowerCase().trim();
+  let q = (input?.value || '').toLowerCase().trim();
   let cleanQ = q.replace(/[,₹\s]/g, '');
   let rows = document.querySelectorAll('#publicDonationRows tr:not(#publicDonationNoMatch)');
   let toggleWrap = document.getElementById('publicDonationToggleWrap');
   let btn = document.getElementById('publicDonationToggleBtn');
   let existingNoMatch = document.getElementById('publicDonationNoMatch');
 
-  if (!q) {
+  let isFiltering = (publicDonationModeFilter !== 'all') || (q.length > 0);
+
+  if (!isFiltering) {
     // Reset view: hide extra rows if not expanded, show toggle button
     let isExpanded = btn && btn.textContent.includes('कमी दाखवा');
     rows.forEach(r => {
@@ -2627,20 +2693,33 @@ function filterPublicDonations(input) {
     });
     if (toggleWrap) toggleWrap.style.display = '';
     if (existingNoMatch) existingNoMatch.remove();
+    let badge = document.getElementById('publicDonationCountBadge');
+    if (badge) badge.textContent = `एकूण: ${db.donations?.length || 0}`;
     return;
   }
 
-  // Actively searching: hide toggle button and search across ALL rows
+  // Actively searching or filtering: hide toggle button and search across ALL rows
   if (toggleWrap) toggleWrap.style.display = 'none';
   let matchCount = 0;
 
   rows.forEach(r => {
+    let rMode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
+    let matchesMode = (publicDonationModeFilter === 'all' || rMode === publicDonationModeFilter.toUpperCase());
     let text = (r.innerText || '').toLowerCase();
     let cleanText = text.replace(/[,₹\s]/g, '');
-    let matches = text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
-    r.style.display = matches ? '' : 'none';
-    if (matches) matchCount++;
+    let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+
+    let isVisible = matchesMode && matchesSearch;
+    r.style.display = isVisible ? '' : 'none';
+    if (isVisible) matchCount++;
   });
+
+  let badge = document.getElementById('publicDonationCountBadge');
+  if (badge) {
+    if (publicDonationModeFilter === 'UPI') badge.textContent = `UPI: ${matchCount}`;
+    else if (publicDonationModeFilter === 'Cash') badge.textContent = `रोख: ${matchCount}`;
+    else badge.textContent = `एकूण: ${matchCount}`;
+  }
 
   if (matchCount === 0) {
     if (!existingNoMatch) {
@@ -2648,7 +2727,9 @@ function filterPublicDonations(input) {
       if (tbody) {
         let tr = document.createElement('tr');
         tr.id = 'publicDonationNoMatch';
-        tr.innerHTML = `<td colspan="4" class="empty" style="text-align:center; padding:18px; color:#8c7166;">🔍 "${escapeHtml(q)}" साठी कोणतीही देणगी नोंद सापडली नाही</td>`;
+        let filterLabel = publicDonationModeFilter === 'UPI' ? 'UPI' : (publicDonationModeFilter === 'Cash' ? 'रोख' : '');
+        let msg = q ? `"${escapeHtml(q)}" साठी कोणतीही देणगी नोंद सापडली नाही` : `कोणतीही ${filterLabel} देणगी नोंद सापडली नाही`;
+        tr.innerHTML = `<td colspan="4" class="empty" style="text-align:center; padding:18px; color:#8c7166;">🔍 ${msg}</td>`;
         tbody.appendChild(tr);
       }
     }
@@ -2656,6 +2737,72 @@ function filterPublicDonations(input) {
     existingNoMatch.remove();
   }
 }
+window.filterPublicDonations = filterPublicDonations;
+
+function setPublicExpenseModeFilter(mode) {
+  publicExpenseModeFilter = mode;
+  document.querySelectorAll('#publicExpenseFilterGroup .mode-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === mode);
+  });
+  applyPublicExpenseFilters();
+}
+window.setPublicExpenseModeFilter = setPublicExpenseModeFilter;
+
+function applyPublicExpenseFilters() {
+  let rows = document.querySelectorAll('#publicExpenseRows tr:not(#publicExpenseNoMatch)');
+  let toggleWrap = document.getElementById('publicExpenseToggleWrap');
+  let btn = document.getElementById('publicExpenseToggleBtn');
+  let existingNoMatch = document.getElementById('publicExpenseNoMatch');
+
+  let isFiltering = (publicExpenseModeFilter !== 'all');
+
+  if (!isFiltering) {
+    let isExpanded = btn && btn.textContent.includes('कमी दाखवा');
+    rows.forEach(r => {
+      let isExtra = r.classList.contains('extra-expense-row');
+      r.style.display = (isExtra && !isExpanded) ? 'none' : '';
+    });
+    if (toggleWrap) toggleWrap.style.display = '';
+    if (existingNoMatch) existingNoMatch.remove();
+    let badge = document.getElementById('publicExpenseCountBadge');
+    if (badge) badge.textContent = `एकूण: ${db.expenses?.length || 0}`;
+    return;
+  }
+
+  // Actively filtering by UPI / Cash
+  if (toggleWrap) toggleWrap.style.display = 'none';
+  let matchCount = 0;
+
+  rows.forEach(r => {
+    let rMode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
+    let matchesMode = (publicExpenseModeFilter === 'all' || rMode === publicExpenseModeFilter.toUpperCase());
+    r.style.display = matchesMode ? '' : 'none';
+    if (matchesMode) matchCount++;
+  });
+
+  let badge = document.getElementById('publicExpenseCountBadge');
+  if (badge) {
+    if (publicExpenseModeFilter === 'UPI') badge.textContent = `UPI: ${matchCount}`;
+    else if (publicExpenseModeFilter === 'Cash') badge.textContent = `रोख: ${matchCount}`;
+    else badge.textContent = `एकूण: ${matchCount}`;
+  }
+
+  if (matchCount === 0) {
+    if (!existingNoMatch) {
+      let tbody = document.getElementById('publicExpenseRows');
+      if (tbody) {
+        let tr = document.createElement('tr');
+        tr.id = 'publicExpenseNoMatch';
+        let filterLabel = publicExpenseModeFilter === 'UPI' ? 'UPI' : 'रोख';
+        tr.innerHTML = `<td colspan="4" class="empty" style="text-align:center; padding:18px; color:#8c7166;">🔍 कोणतीही ${filterLabel} खर्च नोंद सापडली नाही</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+  } else if (existingNoMatch) {
+    existingNoMatch.remove();
+  }
+}
+window.applyPublicExpenseFilters = applyPublicExpenseFilters;
 
 function togglePublicDonations() {
   let extraRows = document.querySelectorAll('.extra-donation-row');
@@ -2663,7 +2810,7 @@ function togglePublicDonations() {
   if (!extraRows.length || !btn) return;
   let isHidden = extraRows[0].style.display === 'none';
   extraRows.forEach(r => r.style.display = isHidden ? '' : 'none');
-  btn.textContent = isHidden ? '▲ Hide extra donations (कमी दाखवा)' : `▼ View all donations (सर्व देणगीदार पहा - ${db.donations.length})`;
+  btn.textContent = isHidden ? '▲ Hide extra donations (कमी दाखवा)' : `▼ View all donations (सर्व देणगीदार पहा - ${db.donations?.length || 0})`;
 }
 
 function togglePublicExpenses() {
@@ -2672,7 +2819,7 @@ function togglePublicExpenses() {
   if (!extraRows.length || !btn) return;
   let isHidden = extraRows[0].style.display === 'none';
   extraRows.forEach(r => r.style.display = isHidden ? '' : 'none');
-  btn.textContent = isHidden ? '▲ Hide extra expenses (कमी दाखवा)' : `▼ View all expenses (सर्व खर्च पहा - ${db.expenses.length})`;
+  btn.textContent = isHidden ? '▲ Hide extra expenses (कमी दाखवा)' : `▼ View all expenses (सर्व खर्च पहा - ${db.expenses?.length || 0})`;
 }
 
 /* ── Swipeable Photo & Video Gallery Lightbox ────────────────────── */
@@ -3102,10 +3249,21 @@ function expenses() {
   let list = sortByNewest(db.expenses);
   let total = sum(list);
   let groups = cats.map(c => [c, sum(list.filter(x => x.category === c))]).filter(x => x[1]);
+
+  let upiCount = list.filter(e => {
+    let m = (e.mode || '').toUpperCase();
+    let p = (e.paidBy || '').toUpperCase();
+    return m.includes('UPI') || p.includes('(UPI)');
+  }).length;
+  let cashCount = list.length - upiCount;
+
   let rows = list.map(e => {
     let hasBillAvailable = e.hasBill || hasValidImage(e.image);
+    let isUpi = (e.mode || '').toUpperCase().includes('UPI') || (e.paidBy || '').toUpperCase().includes('(UPI)');
+    let modeVal = isUpi ? 'UPI' : 'Cash';
+    let isVisible = (expenseModeFilter === 'all' || modeVal.toUpperCase() === expenseModeFilter.toUpperCase());
     return `
-    <tr>
+    <tr data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
       <td>${dateLabel(e.date)}</td>
       <td>
         <div class="trans-info">
@@ -3115,7 +3273,7 @@ function expenses() {
       </td>
       <td>
         ${escapeHtml(e.paidBy || '')}
-        ${e.mode ? `<span class="tag ${e.mode === 'UPI' ? 'online' : 'cash'}" style="margin-left:4px; font-size:9.5px; font-weight:700;">${escapeHtml(e.mode)}</span>` : ''}
+        ${e.mode ? `<span class="tag ${isUpi ? 'online' : 'cash'}" style="margin-left:4px; font-size:9.5px; font-weight:700;">${escapeHtml(e.mode)}</span>` : ''}
       </td>
       <td class="amount expense-t">${rupees(e.amount)}</td>
       <td>
@@ -3128,12 +3286,15 @@ function expenses() {
 
   let cards = list.map(e => {
     let hasBillAvailable = e.hasBill || hasValidImage(e.image);
+    let isUpi = (e.mode || '').toUpperCase().includes('UPI') || (e.paidBy || '').toUpperCase().includes('(UPI)');
+    let modeVal = isUpi ? 'UPI' : 'Cash';
+    let isVisible = (expenseModeFilter === 'all' || modeVal.toUpperCase() === expenseModeFilter.toUpperCase());
     return `
-    <article class="expense-card">
+    <article class="expense-card" data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
       <div class="expense-card-main">
         <span class="expense-meta">${dateLabel(e.date)} · ${escapeHtml(e.category)}</span>
         <strong>${escapeHtml(e.description)}</strong>
-        <small>Paid by ${escapeHtml(e.paidBy || '')} ${e.mode ? `• <span class="tag ${e.mode === 'UPI' ? 'online' : 'cash'}" style="font-size:9.5px; font-weight:700;">${escapeHtml(e.mode)}</span>` : ''}</small>
+        <small>Paid by ${escapeHtml(e.paidBy || '')} ${e.mode ? `• <span class="tag ${isUpi ? 'online' : 'cash'}" style="font-size:9.5px; font-weight:700;">${escapeHtml(e.mode)}</span>` : ''}</small>
       </div>
       <div class="expense-card-actions">
         <b class="amount expense-t">${rupees(e.amount)}</b>
@@ -3152,6 +3313,22 @@ function expenses() {
         <div class="toolbar">
           <input class="search" placeholder="Search expense, person or category…" oninput="filterTable(this,'expenseRows')">
           <button class="primary-btn" onclick="openForm('expense')">+ Add Expense</button>
+        </div>
+        <div class="mode-filter-bar">
+          <div class="mode-filter-group" id="expenseFilterGroup">
+            <button type="button" class="mode-filter-btn all-btn ${expenseModeFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setExpenseModeFilter('all')">
+              <span>सर्व (All)</span>
+              <span class="mode-badge">${list.length}</span>
+            </button>
+            <button type="button" class="mode-filter-btn upi-btn ${expenseModeFilter === 'UPI' ? 'active' : ''}" data-filter="UPI" onclick="setExpenseModeFilter('UPI')">
+              <span>📱 UPI</span>
+              <span class="mode-badge">${upiCount}</span>
+            </button>
+            <button type="button" class="mode-filter-btn cash-btn ${expenseModeFilter === 'Cash' ? 'active' : ''}" data-filter="Cash" onclick="setExpenseModeFilter('Cash')">
+              <span>💵 रोख (Cash)</span>
+              <span class="mode-badge">${cashCount}</span>
+            </button>
+          </div>
         </div>
         <div class="desktop-expenses">
           ${rows ? tableWrap(`<thead><tr><th>Date</th><th>Expense details</th><th>Paid by</th><th>Amount</th><th>Bill Photo</th><th></th></tr></thead><tbody id="expenseRows">${rows}</tbody>`) : (_syncingCloud ? `
@@ -3201,27 +3378,39 @@ function donations() {
   let total = sum(db.donations);
   let list = sortByNewest(db.donations);
 
-  let rows = list.map(d => `
-    <tr>
+  let upiCount = list.filter(d => (d.mode || '').toUpperCase().includes('UPI')).length;
+  let cashCount = list.length - upiCount;
+
+  let rows = list.map(d => {
+    let isUpi = (d.mode || '').toUpperCase().includes('UPI');
+    let modeVal = isUpi ? 'UPI' : 'Cash';
+    let isVisible = (donationModeFilter === 'all' || modeVal.toUpperCase() === donationModeFilter.toUpperCase());
+    return `
+    <tr data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
       <td>${dateLabel(d.date)}</td>
       <td>
         <strong>${escapeHtml(d.name)}</strong>
         ${d.phone ? `<br><small class="phone-note">📱 ${escapeHtml(d.phone)}</small>` : ''}
       </td>
-      <td><span class="tag morning">${escapeHtml(d.mode)}</span></td>
+      <td><span class="tag ${isUpi ? 'online' : 'cash'}">${escapeHtml(d.mode || modeVal)}</span></td>
       <td class="amount income-t">${rupees(d.amount)}</td>
       <td>
         <button class="whatsapp-btn-sm" onclick="openReceiptModal('${d.id}')">💬 WhatsApp Receipt</button>
       </td>
       <td><button class="table-action" onclick="guardEdit('donation','${d.id}')">•••</button></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
-  let cards = list.map(d => `
-    <article class="donation-card">
+  let cards = list.map(d => {
+    let isUpi = (d.mode || '').toUpperCase().includes('UPI');
+    let modeVal = isUpi ? 'UPI' : 'Cash';
+    let isVisible = (donationModeFilter === 'all' || modeVal.toUpperCase() === donationModeFilter.toUpperCase());
+    return `
+    <article class="donation-card" data-mode="${modeVal}" style="${isVisible ? '' : 'display:none;'}">
       <div class="donation-card-info">
         <strong>${escapeHtml(d.name)}</strong>
-        <span>${dateLabel(d.date)} · <span class="tag morning">${escapeHtml(d.mode)}</span>${d.phone ? ` · 📱 ${escapeHtml(d.phone)}` : ''}</span>
+        <span>${dateLabel(d.date)} · <span class="tag ${isUpi ? 'online' : 'cash'}">${escapeHtml(d.mode || modeVal)}</span>${d.phone ? ` · 📱 ${escapeHtml(d.phone)}` : ''}</span>
       </div>
       <div class="donation-card-right">
         <b class="amount income-t">${rupees(d.amount)}</b>
@@ -3229,7 +3418,8 @@ function donations() {
         <button class="table-action" onclick="guardEdit('donation','${d.id}')">•••</button>
       </div>
     </article>
-  `).join('');
+  `;
+  }).join('');
 
   return shell(
     'Donations & Collections',
@@ -3253,6 +3443,22 @@ function donations() {
         <input class="search" placeholder="🔍 Search by name, amount e.g. 500, phone, mode…" oninput="filterTable(this,'donationRows')">
         <button class="outline-btn qr-btn-main" onclick="openPaymentQR()">▣ Collect Payment (QR)</button>
         <button class="primary-btn" onclick="openForm('donation')">+ Add Donation</button>
+      </div>
+      <div class="mode-filter-bar">
+        <div class="mode-filter-group" id="donationFilterGroup">
+          <button type="button" class="mode-filter-btn all-btn ${donationModeFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setDonationModeFilter('all')">
+            <span>सर्व (All)</span>
+            <span class="mode-badge">${list.length}</span>
+          </button>
+          <button type="button" class="mode-filter-btn upi-btn ${donationModeFilter === 'UPI' ? 'active' : ''}" data-filter="UPI" onclick="setDonationModeFilter('UPI')">
+            <span>📱 UPI</span>
+            <span class="mode-badge">${upiCount}</span>
+          </button>
+          <button type="button" class="mode-filter-btn cash-btn ${donationModeFilter === 'Cash' ? 'active' : ''}" data-filter="Cash" onclick="setDonationModeFilter('Cash')">
+            <span>💵 रोख (Cash)</span>
+            <span class="mode-badge">${cashCount}</span>
+          </button>
+        </div>
       </div>
       <div class="desktop-donations">
         ${tableWrap(`<thead><tr><th>Date</th><th>Contributor</th><th>Mode</th><th>Amount</th><th>WhatsApp Receipt</th><th></th></tr></thead><tbody id="donationRows">${rows}</tbody>`)}
@@ -5312,7 +5518,168 @@ function switchMsgDate(d) {
   renderAartiMessageModal();
 }
 
+function setDonationModeFilter(mode) {
+  donationModeFilter = mode;
+  document.querySelectorAll('#donationFilterGroup .mode-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === mode);
+  });
+  applyDonationFilters();
+}
+window.setDonationModeFilter = setDonationModeFilter;
+
+function applyDonationFilters(inputEl) {
+  let searchInput = inputEl || document.querySelector('#page input.search');
+  let q = (searchInput?.value || '').toLowerCase().trim();
+  let cleanQ = q.replace(/[,₹\s]/g, '');
+
+  let matchCount = 0;
+  document.querySelectorAll('#donationRows tr:not(#donationNoMatch)').forEach(r => {
+    let mode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
+    let matchesMode = (donationModeFilter === 'all' || mode === donationModeFilter.toUpperCase());
+    let text = (r.innerText || '').toLowerCase();
+    let cleanText = text.replace(/[,₹\s]/g, '');
+    let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+    let isVisible = matchesMode && matchesSearch;
+    r.style.display = isVisible ? '' : 'none';
+    if (isVisible) matchCount++;
+  });
+
+  let existingNoMatch = document.getElementById('donationNoMatch');
+  if (matchCount === 0) {
+    if (!existingNoMatch) {
+      let tbody = document.getElementById('donationRows');
+      if (tbody) {
+        let tr = document.createElement('tr');
+        tr.id = 'donationNoMatch';
+        let filterLabel = donationModeFilter === 'UPI' ? 'UPI' : (donationModeFilter === 'Cash' ? 'रोख (Cash)' : '');
+        let msg = q ? `"${escapeHtml(q)}" साठी कोणतीही देणगी नोंद सापडली नाही` : `कोणतीही ${filterLabel} देणगी नोंद सापडली नाही`;
+        tr.innerHTML = `<td colspan="6" class="empty" style="text-align:center; padding:18px; color:#8c7166;">🔍 ${msg}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+  } else if (existingNoMatch) {
+    existingNoMatch.remove();
+  }
+
+  let mobileMatchCount = 0;
+  document.querySelectorAll('.donation-mobile-list .donation-card').forEach(c => {
+    let mode = (c.getAttribute('data-mode') || 'Cash').toUpperCase();
+    let matchesMode = (donationModeFilter === 'all' || mode === donationModeFilter.toUpperCase());
+    let text = (c.innerText || '').toLowerCase();
+    let cleanText = text.replace(/[,₹\s]/g, '');
+    let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+    let isVisible = matchesMode && matchesSearch;
+    c.style.display = isVisible ? '' : 'none';
+    if (isVisible) mobileMatchCount++;
+  });
+
+  let mobileNoMatch = document.getElementById('donationMobileNoMatch');
+  if (mobileMatchCount === 0) {
+    if (!mobileNoMatch) {
+      let listEl = document.querySelector('.donation-mobile-list');
+      if (listEl) {
+        let div = document.createElement('div');
+        div.id = 'donationMobileNoMatch';
+        div.className = 'empty';
+        div.style.cssText = 'text-align:center; padding:18px; color:#8c7166;';
+        let filterLabel = donationModeFilter === 'UPI' ? 'UPI' : (donationModeFilter === 'Cash' ? 'रोख (Cash)' : '');
+        let msg = q ? `"${escapeHtml(q)}" साठी कोणतीही देणगी नोंद सापडली नाही` : `कोणतीही ${filterLabel} देणगी नोंद सापडली नाही`;
+        div.innerHTML = `🔍 ${msg}`;
+        listEl.appendChild(div);
+      }
+    }
+  } else if (mobileNoMatch) {
+    mobileNoMatch.remove();
+  }
+}
+window.applyDonationFilters = applyDonationFilters;
+
+function setExpenseModeFilter(mode) {
+  expenseModeFilter = mode;
+  document.querySelectorAll('#expenseFilterGroup .mode-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === mode);
+  });
+  applyExpenseFilters();
+}
+window.setExpenseModeFilter = setExpenseModeFilter;
+
+function applyExpenseFilters(inputEl) {
+  let searchInput = inputEl || document.querySelector('#page input.search');
+  let q = (searchInput?.value || '').toLowerCase().trim();
+  let cleanQ = q.replace(/[,₹\s]/g, '');
+
+  let matchCount = 0;
+  document.querySelectorAll('#expenseRows tr:not(#expenseNoMatch)').forEach(r => {
+    let mode = (r.getAttribute('data-mode') || 'Cash').toUpperCase();
+    let matchesMode = (expenseModeFilter === 'all' || mode === expenseModeFilter.toUpperCase());
+    let text = (r.innerText || '').toLowerCase();
+    let cleanText = text.replace(/[,₹\s]/g, '');
+    let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+    let isVisible = matchesMode && matchesSearch;
+    r.style.display = isVisible ? '' : 'none';
+    if (isVisible) matchCount++;
+  });
+
+  let existingNoMatch = document.getElementById('expenseNoMatch');
+  if (matchCount === 0) {
+    if (!existingNoMatch) {
+      let tbody = document.getElementById('expenseRows');
+      if (tbody) {
+        let tr = document.createElement('tr');
+        tr.id = 'expenseNoMatch';
+        let filterLabel = expenseModeFilter === 'UPI' ? 'UPI' : (expenseModeFilter === 'Cash' ? 'रोख (Cash)' : '');
+        let msg = q ? `"${escapeHtml(q)}" साठी कोणतीही खर्च नोंद सापडली नाही` : `कोणतीही ${filterLabel} खर्च नोंद सापडली नाही`;
+        tr.innerHTML = `<td colspan="6" class="empty" style="text-align:center; padding:18px; color:#8c7166;">🔍 ${msg}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+  } else if (existingNoMatch) {
+    existingNoMatch.remove();
+  }
+
+  let mobileMatchCount = 0;
+  document.querySelectorAll('.expense-mobile-list .expense-card').forEach(c => {
+    let mode = (c.getAttribute('data-mode') || 'Cash').toUpperCase();
+    let matchesMode = (expenseModeFilter === 'all' || mode === expenseModeFilter.toUpperCase());
+    let text = (c.innerText || '').toLowerCase();
+    let cleanText = text.replace(/[,₹\s]/g, '');
+    let matchesSearch = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
+    let isVisible = matchesMode && matchesSearch;
+    c.style.display = isVisible ? '' : 'none';
+    if (isVisible) mobileMatchCount++;
+  });
+
+  let mobileNoMatch = document.getElementById('expenseMobileNoMatch');
+  if (mobileMatchCount === 0) {
+    if (!mobileNoMatch) {
+      let listEl = document.querySelector('.expense-mobile-list');
+      if (listEl) {
+        let div = document.createElement('div');
+        div.id = 'expenseMobileNoMatch';
+        div.className = 'empty';
+        div.style.cssText = 'text-align:center; padding:18px; color:#8c7166;';
+        let filterLabel = expenseModeFilter === 'UPI' ? 'UPI' : (expenseModeFilter === 'Cash' ? 'रोख (Cash)' : '');
+        let msg = q ? `"${escapeHtml(q)}" साठी कोणतीही खर्च नोंद सापडली नाही` : `कोणतीही ${filterLabel} खर्च नोंद सापडली नाही`;
+        div.innerHTML = `🔍 ${msg}`;
+        listEl.appendChild(div);
+      }
+    }
+  } else if (mobileNoMatch) {
+    mobileNoMatch.remove();
+  }
+}
+window.applyExpenseFilters = applyExpenseFilters;
+
 function filterTable(i, target) {
+  if (target === 'donationRows') {
+    applyDonationFilters(i);
+    return;
+  }
+  if (target === 'expenseRows') {
+    applyExpenseFilters(i);
+    return;
+  }
+
   let q = (i.value || '').toLowerCase().trim();
   let cleanQ = q.replace(/[,₹\s]/g, '');
 
@@ -5323,23 +5690,6 @@ function filterTable(i, target) {
     let matches = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
     r.style.display = matches ? '' : 'none';
   });
-
-  // 2. Filter mobile cards if on donations or expenses page
-  if (target === 'donationRows') {
-    document.querySelectorAll('.donation-mobile-list .donation-card').forEach(c => {
-      let text = (c.innerText || '').toLowerCase();
-      let cleanText = text.replace(/[,₹\s]/g, '');
-      let matches = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
-      c.style.display = matches ? '' : 'none';
-    });
-  } else if (target === 'expenseRows') {
-    document.querySelectorAll('.expense-mobile-list .expense-card').forEach(c => {
-      let text = (c.innerText || '').toLowerCase();
-      let cleanText = text.replace(/[,₹\s]/g, '');
-      let matches = !q || text.includes(q) || (cleanQ.length > 0 && cleanText.includes(cleanQ));
-      c.style.display = matches ? '' : 'none';
-    });
-  }
 }
 
 function filterCards(i, target) {

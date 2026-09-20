@@ -2353,3 +2353,117 @@ body {
   }
 }
 
+/* ── Mode Filter Buttons (UPI & Cash) ────────────────────────────────── */
+.mode-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mode-filter-group {
+  display: inline-flex;
+  align-items: center;
+  background: #fbf5ef;
+  border: 1px solid #eedecf;
+  border-radius: 12px;
+  padding: 3px;
+  gap: 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.mode-filter-btn {
+  border: none;
+  background: transparent;
+  color: #795d50;
+  font: 600 12px inherit;
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  min-height: 34px;
+  user-select: none;
+}
+
+.mode-filter-btn:hover {
+  background: #f3e5d7;
+  color: #2c1b18;
+}
+
+.mode-filter-btn.active {
+  background: #7d1c12;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(125, 28, 18, 0.22);
+}
+
+.mode-filter-btn.active.upi-btn {
+  background: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+}
+
+.mode-filter-btn.active.cash-btn {
+  background: #d97706;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25);
+}
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 12px;
+  min-width: 18px;
+  line-height: 1.2;
+}
+
+.mode-filter-btn.active .mode-badge {
+  background: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
+.mode-filter-summary {
+  font-size: 11.5px;
+  color: #8c6050;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+@media (max-width: 640px) {
+  .mode-filter-bar {
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  .mode-filter-group {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+  .mode-filter-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 7px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .mode-filter-summary {
+    width: 100%;
+    font-size: 11px;
+    margin-top: -2px;
+    margin-left: 2px;
+  }
+}
+
+
